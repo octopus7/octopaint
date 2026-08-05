@@ -56,7 +56,6 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="App.xaml.h"><DependentUpon>App.xaml</DependentUpon></ClInclude>
     <ClInclude Include="MainWindow.xaml.h"><DependentUpon>MainWindow.xaml</DependentUpon></ClInclude>
-    <ClInclude Include="ToolOptionsState.h" />
   </ItemGroup>
   <ItemGroup>
     <ApplicationDefinition Include="App.xaml" />
