@@ -59,6 +59,7 @@
 - [x] 브러시 크기·경도·간격·Flow·Opacity 옵션
 - [x] 압력에 따른 dab size 및 opacity 적용 토글
 - [x] Stroke Stabilizer
+- [x] 활성 도구·전경/배경색·브러시·압력·Stabilizer 설정을 보관하는 UI 중립 `EditorState`
 - [ ] soft/hard tip을 지원하는 일반 Paint Brush
 - [ ] 색 alpha 및 마스크·채널 coverage를 대상으로 하는 Eraser
 - [ ] 활성 레이어·합성 결과를 선택할 수 있는 Eyedropper

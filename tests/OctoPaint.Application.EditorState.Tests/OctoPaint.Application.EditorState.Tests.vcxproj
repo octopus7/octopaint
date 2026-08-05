@@ -5,13 +5,13 @@
     <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{C4B74C54-B6A0-4E6F-A255-486BD9E4D31E}</ProjectGuid>
-    <RootNamespace>OctoPaint.Application</RootNamespace>
-    <ProjectName>OctoPaint.Application</ProjectName>
+    <ProjectGuid>{F5439F94-D558-4DD1-A78A-C572E9D7259F}</ProjectGuid>
+    <RootNamespace>OctoPaint.Application.EditorState.Tests</RootNamespace>
+    <ProjectName>OctoPaint.Application.EditorState.Tests</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
     <UseDebugLibraries Condition="'$(Configuration)'=='Release'">false</UseDebugLibraries>
     <WholeProgramOptimization Condition="'$(Configuration)'=='Release'">true</WholeProgramOptimization>
@@ -19,18 +19,15 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(ProjectDir)..\OctoPaint.Core\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\src\OctoPaint.Application\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="include\octopaint\application\EditorState.h" />
-    <ClInclude Include="include\octopaint\application\Workspace.h" />
-    <ClCompile Include="src\EditorState.cpp" />
-    <ClCompile Include="src\Workspace.cpp" />
+    <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\OctoPaint.Core\OctoPaint.Core.vcxproj">
-      <Project>{6CBA5B82-9CE0-4E11-B4BC-F22235E23168}</Project>
+    <ProjectReference Include="..\..\src\OctoPaint.Application\OctoPaint.Application.vcxproj">
+      <Project>{C4B74C54-B6A0-4E6F-A255-486BD9E4D31E}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
