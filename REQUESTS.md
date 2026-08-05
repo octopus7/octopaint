@@ -341,3 +341,24 @@
 - 스타일러스 압력은 크기와 Opacity에 독립적으로 적용 여부를 선택할 수 있다.
 - Stroke Stabilizer는 플랫폼 입력 형식에 의존하지 않고 `StylusSample` 스트림을 소비하며 마지막 원시 입력점을 정확한 종점으로 확정한다.
 - 모든 도구 결과는 WinUI, WinRT, Win32, Direct3D 형식을 공개 API에 노출하지 않는다.
+
+---
+
+# 요청 시작: 2026-08-06 00:47:10 KST | 작업 완료: 2026-08-06 01:06:48 KST (소요 시간: 19분 38초)
+
+## 구현 내역
+
+- 각 문서가 기본 Raster Layer와 활성 레이어를 가지도록 Application 작업 공간을 Core `LayerTree`에 연결했다.
+- 문서와 레이어를 닫아도 재사용되지 않는 Application `LayerId`를 구현했다.
+- 부모 ID, 깊이, 형제 순서, 종류와 공통 속성을 제공하는 UI 중립 flat pre-order `LayerSummary`를 구현했다.
+- Raster/Group 추가, 제거, 이동, 이름, Opacity, 가시성, 투명도 잠금과 Blend Mode를 변경하는 9개 undoable 명령을 구현했다.
+- 제거한 하위 트리의 정확한 복구, 이동 전 위치 복구와 활성 레이어 복구를 구현했다.
+- 레이어 변경을 기존 문서별 history, saved revision 및 dirty 상태 판정에 연결했다.
+- 전용 Application 레이어 테스트를 추가해 문서 격리, 중첩 순서, 모든 속성의 Undo/Redo, 저장 상태와 ID 비재사용을 검증했다.
+
+## 결정 내용
+
+- WinUI에는 Core 객체를 직접 노출하지 않고 분리된 Application 스냅샷만 제공한다.
+- 레이어 명령 하나는 문서 history의 revision 하나를 차지하며 실패 시 부분 변경을 남기지 않는다.
+- 투명도 잠금은 일반 잠금 및 Opacity와 독립된 속성으로 스냅샷과 Undo/Redo에 포함한다.
+- 레이어 ID는 문서 사이에서도 고유하며 닫힌 문서의 ID를 새 레이어에 재사용하지 않는다.

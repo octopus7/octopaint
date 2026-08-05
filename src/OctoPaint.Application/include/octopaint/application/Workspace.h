@@ -1,6 +1,7 @@
 #pragma once
 
 #include <compare>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -52,6 +53,64 @@ namespace octopaint::application
         friend class Workspace;
     };
 
+    class LayerId final
+    {
+    public:
+        constexpr LayerId() noexcept = default;
+
+        [[nodiscard]] constexpr std::uint64_t Value() const noexcept
+        {
+            return value_;
+        }
+
+        [[nodiscard]] constexpr explicit operator bool() const noexcept
+        {
+            return value_ != 0;
+        }
+
+        auto operator<=>(LayerId const&) const = default;
+
+    private:
+        explicit constexpr LayerId(std::uint64_t const value) noexcept
+            : value_(value)
+        {
+        }
+
+        std::uint64_t value_{};
+
+        friend class Workspace;
+        friend class AddRasterLayerCommand;
+        friend class AddGroupLayerCommand;
+        friend class RemoveLayerCommand;
+        friend class MoveLayerCommand;
+    };
+
+    enum class LayerKind : std::uint8_t
+    {
+        Raster,
+        Group
+    };
+
+    enum class BlendMode : std::uint8_t
+    {
+        Normal,
+        Multiply,
+        Screen,
+        Overlay,
+        Darken,
+        Lighten,
+        ColorDodge,
+        ColorBurn,
+        SoftLight,
+        HardLight,
+        Difference,
+        Exclusion,
+        Hue,
+        Saturation,
+        Color,
+        Luminosity
+    };
+
     // The deliberately small mutation boundary exposed to application commands.
     // UI events should create a command and submit it to Workspace instead of
     // mutating documents directly.
@@ -63,11 +122,21 @@ namespace octopaint::application
         void Rename(std::string title);
 
     private:
-        explicit DocumentMutation(void* document) noexcept;
+        explicit DocumentMutation(void* document, void* layers) noexcept;
 
         void* document_{};
+        void* layers_{};
 
         friend class Workspace;
+        friend class AddRasterLayerCommand;
+        friend class AddGroupLayerCommand;
+        friend class RemoveLayerCommand;
+        friend class MoveLayerCommand;
+        friend class RenameLayerCommand;
+        friend class SetLayerOpacityCommand;
+        friend class SetLayerVisibilityCommand;
+        friend class SetLayerAlphaLockedCommand;
+        friend class SetLayerBlendModeCommand;
     };
 
     class DocumentCommand
@@ -95,12 +164,191 @@ namespace octopaint::application
         bool captured_previous_title_{};
     };
 
+    class AddRasterLayerCommand final : public DocumentCommand
+    {
+    public:
+        explicit AddRasterLayerCommand(
+            std::string name,
+            std::optional<LayerId> parent = std::nullopt,
+            std::optional<std::size_t> index = std::nullopt);
+
+        [[nodiscard]] LayerId CreatedLayerId() const noexcept;
+        [[nodiscard]] std::string Label() const override;
+        void Execute(DocumentMutation& document) override;
+        void Undo(DocumentMutation& document) override;
+
+    private:
+        LayerId id_;
+        std::string name_;
+        std::optional<LayerId> parent_;
+        std::optional<std::size_t> requested_index_;
+        std::size_t insertion_index_{};
+        std::optional<LayerId> previous_active_layer_;
+        bool executed_once_{};
+    };
+
+    class AddGroupLayerCommand final : public DocumentCommand
+    {
+    public:
+        explicit AddGroupLayerCommand(
+            std::string name,
+            std::optional<LayerId> parent = std::nullopt,
+            std::optional<std::size_t> index = std::nullopt);
+
+        [[nodiscard]] LayerId CreatedLayerId() const noexcept;
+        [[nodiscard]] std::string Label() const override;
+        void Execute(DocumentMutation& document) override;
+        void Undo(DocumentMutation& document) override;
+
+    private:
+        LayerId id_;
+        std::string name_;
+        std::optional<LayerId> parent_;
+        std::optional<std::size_t> requested_index_;
+        std::size_t insertion_index_{};
+        std::optional<LayerId> previous_active_layer_;
+        bool executed_once_{};
+    };
+
+    class RemoveLayerCommand final : public DocumentCommand
+    {
+    public:
+        explicit RemoveLayerCommand(LayerId id);
+        ~RemoveLayerCommand() override;
+
+        [[nodiscard]] std::string Label() const override;
+        void Execute(DocumentMutation& document) override;
+        void Undo(DocumentMutation& document) override;
+
+    private:
+        struct Impl;
+        std::unique_ptr<Impl> impl_;
+    };
+
+    class MoveLayerCommand final : public DocumentCommand
+    {
+    public:
+        MoveLayerCommand(
+            LayerId id,
+            std::optional<LayerId> new_parent,
+            std::size_t new_index);
+
+        [[nodiscard]] std::string Label() const override;
+        void Execute(DocumentMutation& document) override;
+        void Undo(DocumentMutation& document) override;
+
+    private:
+        LayerId id_;
+        std::optional<LayerId> new_parent_;
+        std::size_t new_index_{};
+        std::optional<LayerId> previous_parent_;
+        std::size_t previous_index_{};
+        bool captured_previous_location_{};
+    };
+
+    class RenameLayerCommand final : public DocumentCommand
+    {
+    public:
+        RenameLayerCommand(LayerId id, std::string new_name);
+
+        [[nodiscard]] std::string Label() const override;
+        void Execute(DocumentMutation& document) override;
+        void Undo(DocumentMutation& document) override;
+
+    private:
+        LayerId id_;
+        std::string new_name_;
+        std::string previous_name_;
+        bool captured_previous_name_{};
+    };
+
+    class SetLayerOpacityCommand final : public DocumentCommand
+    {
+    public:
+        SetLayerOpacityCommand(LayerId id, float opacity);
+
+        [[nodiscard]] std::string Label() const override;
+        void Execute(DocumentMutation& document) override;
+        void Undo(DocumentMutation& document) override;
+
+    private:
+        LayerId id_;
+        float opacity_{};
+        float previous_opacity_{};
+        bool captured_previous_opacity_{};
+    };
+
+    class SetLayerVisibilityCommand final : public DocumentCommand
+    {
+    public:
+        SetLayerVisibilityCommand(LayerId id, bool visible);
+
+        [[nodiscard]] std::string Label() const override;
+        void Execute(DocumentMutation& document) override;
+        void Undo(DocumentMutation& document) override;
+
+    private:
+        LayerId id_;
+        bool visible_{};
+        bool previous_visibility_{};
+        bool captured_previous_visibility_{};
+    };
+
+    class SetLayerAlphaLockedCommand final : public DocumentCommand
+    {
+    public:
+        SetLayerAlphaLockedCommand(LayerId id, bool alpha_locked);
+
+        [[nodiscard]] std::string Label() const override;
+        void Execute(DocumentMutation& document) override;
+        void Undo(DocumentMutation& document) override;
+
+    private:
+        LayerId id_;
+        bool alpha_locked_{};
+        bool previous_alpha_locked_{};
+        bool captured_previous_alpha_locked_{};
+    };
+
+    class SetLayerBlendModeCommand final : public DocumentCommand
+    {
+    public:
+        SetLayerBlendModeCommand(LayerId id, BlendMode blend_mode);
+
+        [[nodiscard]] std::string Label() const override;
+        void Execute(DocumentMutation& document) override;
+        void Undo(DocumentMutation& document) override;
+
+    private:
+        LayerId id_;
+        BlendMode blend_mode_{ BlendMode::Normal };
+        BlendMode previous_blend_mode_{ BlendMode::Normal };
+        bool captured_previous_blend_mode_{};
+    };
+
     struct CommandAvailability final
     {
         bool can_undo{};
         bool can_redo{};
         std::string undo_label;
         std::string redo_label;
+    };
+
+    // A detached, flat pre-order representation. parent_id, depth and
+    // sibling_index let any frontend reconstruct the tree without Core types.
+    struct LayerSummary final
+    {
+        LayerId id;
+        std::optional<LayerId> parent_id;
+        std::size_t sibling_index{};
+        std::size_t depth{};
+        LayerKind kind{ LayerKind::Raster };
+        std::string name;
+        bool visible{ true };
+        bool locked{};
+        bool alpha_locked{};
+        float opacity{ 1.0F };
+        BlendMode blend_mode{ BlendMode::Normal };
     };
 
     struct DocumentSummary final
@@ -113,6 +361,8 @@ namespace octopaint::application
         std::uint64_t current_revision{};
         std::uint64_t saved_revision{};
         CommandAvailability commands;
+        std::vector<LayerSummary> layers;
+        std::optional<LayerId> active_layer_id;
     };
 
     // This is a detached value snapshot: modifying the returned values never
@@ -127,6 +377,7 @@ namespace octopaint::application
         std::vector<DocumentSummary> documents;
         std::optional<DocumentId> active_document_id;
         CommandAvailability active_commands;
+        std::optional<LayerId> active_layer_id;
     };
 
     class Workspace final
@@ -147,6 +398,8 @@ namespace octopaint::application
         [[nodiscard]] bool ActivateDocument(DocumentId id);
         [[nodiscard]] std::optional<DocumentId> ActiveDocument() const noexcept;
         [[nodiscard]] bool Contains(DocumentId id) const noexcept;
+        [[nodiscard]] bool ActivateLayer(DocumentId document_id, LayerId layer_id);
+        [[nodiscard]] bool ActivateLayer(LayerId layer_id);
 
         void ExecuteCommand(DocumentId id, std::unique_ptr<DocumentCommand> command);
         [[nodiscard]] bool Undo(DocumentId id);
