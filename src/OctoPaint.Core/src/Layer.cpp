@@ -255,6 +255,11 @@ namespace octopaint::core
         properties_.locked = locked;
     }
 
+    void Layer::SetAlphaLocked(bool const alpha_locked) noexcept
+    {
+        properties_.alpha_locked = alpha_locked;
+    }
+
     void Layer::SetOpacity(float const opacity)
     {
         if (!std::isfinite(opacity) || opacity < 0.0F || opacity > 1.0F)

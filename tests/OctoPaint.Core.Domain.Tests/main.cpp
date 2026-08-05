@@ -126,13 +126,16 @@ namespace
         Require(raster.Kind() == LayerKind::Raster, "RasterLayer must report its domain kind.");
         Require(raster.Properties().opacity == 0.75F, "Layer opacity must be preserved.");
         Require(raster.Properties().blend_mode == BlendMode::Multiply, "Layer blend mode must be preserved.");
+        Require(!raster.Properties().alpha_locked, "Layer alpha lock must default to disabled.");
 
         raster.Rename("Ink");
         raster.SetVisible(false);
         raster.SetLocked(true);
+        raster.SetAlphaLocked(true);
         raster.SetOpacity(0.25F);
         raster.SetBlendMode(BlendMode::Screen);
-        Require(raster.Properties().name_utf8 == "Ink" && !raster.Properties().visible && raster.Properties().locked,
+        Require(raster.Properties().name_utf8 == "Ink" && !raster.Properties().visible
+            && raster.Properties().locked && raster.Properties().alpha_locked,
             "Common layer properties must be editable on every concrete layer.");
         Require(raster.Properties().opacity == 0.25F && raster.Properties().blend_mode == BlendMode::Screen,
             "Common opacity and blend mode updates must be retained.");

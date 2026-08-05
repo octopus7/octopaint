@@ -61,6 +61,7 @@ namespace octopaint::core
         std::string name_utf8;
         bool visible{ true };
         bool locked{ false };
+        bool alpha_locked{ false };
         float opacity{ 1.0F };
         BlendMode blend_mode{ BlendMode::Normal };
     };
@@ -121,6 +122,7 @@ namespace octopaint::core
         void Rename(std::string name_utf8);
         void SetVisible(bool visible) noexcept;
         void SetLocked(bool locked) noexcept;
+        void SetAlphaLocked(bool alpha_locked) noexcept;
         void SetOpacity(float opacity);
         void SetBlendMode(BlendMode blend_mode) noexcept;
 
