@@ -147,3 +147,13 @@ Rust 코어
 - [Microsoft의 WinUI 3 지원 언어 안내](https://learn.microsoft.com/en-us/windows/apps/)
 - [Microsoft windows-rs](https://github.com/microsoft/windows-rs)
 - [Rust for Windows 공식 안내](https://learn.microsoft.com/en-us/windows/dev-environment/rust/rust-for-windows)
+
+---
+
+## 질문 (00:32:37 KST)
+
+설계된 기능은 아직 구현하지 않은 것인가?
+
+### 답변
+
+그렇다. 현재 구현된 범위는 C++23/WinUI 3 프로젝트 골격, 교체 가능한 프런트엔드 경계, 최소 문서 생성 흐름과 헤드리스 테스트다. 다중 문서, 레이어·블렌딩·마스크·채널·선택, 조정·필터, Crop·Canvas Resize·Image Resample, `.ocp`, PNG/JPEG와 PSD 호환 기능은 설계 문서로만 정의되어 있고 실제 기능 구현은 아직 시작 전이다.
