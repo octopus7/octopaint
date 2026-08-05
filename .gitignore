@@ -12,6 +12,8 @@
 out/
 build/
 cmake-build-*/
+**/bin/
+**/obj/
 ipch/
 Generated Files/
 *.iobj
