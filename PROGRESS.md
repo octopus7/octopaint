@@ -115,6 +115,8 @@
 - [x] 희소 타일 및 레이어 도메인 테스트
 - [x] 페인팅·선택·압력 감도·Stroke Stabilizer 테스트
 - [x] Application 레이어 명령 및 문서 격리 테스트
+- [x] Application 편집 도구 상태 및 입력 검증 테스트
+- [x] 릴리스 배치에서 6개 headless 테스트 실행 및 실패 전파
 - [x] `VERSION` 버전 정보 원본
 - [x] 버전을 포함한 `OctoPaint-<version>-win-x64.zip` 빌드 흐름
 - [x] 버전을 포함한 `OctoPaint-<version>-win-x64.msi` WiX 빌드 정의
@@ -126,5 +128,5 @@
 ## 현재 제공 범위
 
 - [ ] 🚧 도구 엔진, WinUI 도구 모음/색상 선택기 및 문서-레이어 명령 완성 및 통합
-- [ ] 전체 Debug x64 솔루션 빌드 및 모든 헤드리스 테스트 실행
+- [x] 전체 Debug x64 솔루션 빌드 및 모든 헤드리스 테스트 실행
 - [ ] 독립적으로 완료된 각 작업 단위를 커밋한 뒤 즉시 푸시

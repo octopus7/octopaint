@@ -443,3 +443,20 @@
 - 툴바는 도구 상태를 투영하며 도구 알고리즘과 문서 변경 규칙은 Core 및 Application에 둔다.
 - 색상 선택기의 내부 기준은 HSV와 RGBA이며 16진수 입력은 같은 값을 표현하는 편집 형식으로 취급한다.
 - 스타일러스 압력의 Dab Size와 Opacity 영향은 서로 독립적으로 켜고 끌 수 있다.
+
+---
+
+# 요청 시작: 2026-08-06 01:15:06 KST | 작업 완료: 2026-08-06 01:21:12 KST (소요 시간: 0시간 6분 6초)
+
+## 구현 내역
+
+- `build-release.bat`의 Release 검증 단계에 `OctoPaint.Tools.Tests` 실행을 추가했다.
+- `OctoPaint.Application.Layer.Tests`와 `OctoPaint.Application.EditorState.Tests` 실행을 추가했다.
+- 각 테스트 실행 파일이 생성됐는지 확인하고 누락 또는 실패 시 릴리스 생성을 중단하도록 했다.
+- 전체 Debug x64 솔루션 빌드와 6개 headless 테스트를 실행해 현재 통합 상태를 검증했다.
+
+## 결정 내용
+
+- ZIP 및 MSI는 Core, Application, 도메인, 도구, 레이어 명령과 편집 상태 테스트가 모두 통과한 경우에만 생성한다.
+- 각 테스트 실패 메시지에는 실패한 프로젝트 이름을 명시한다.
+- 기존 6단계 릴리스 흐름과 버전 포함 ZIP/MSI 파일명 규칙은 유지한다.
