@@ -108,6 +108,76 @@ struct LayerCommon {
 - 최소 블렌드 모드는 Normal, Multiply, Screen, Overlay, Darken, Lighten, Color Dodge, Color Burn, Soft Light, Hard Light, Difference, Exclusion, Hue, Saturation, Color, Luminosity다.
 - 각 블렌드 모드는 CPU 참조 구현과 HLSL 구현에 동일한 골든 테스트 벡터를 적용한다.
 
+### 확정된 고급 레이어 계약
+
+고급 레이어 기능도 프런트엔드가 아닌 Core/Application 계약에 속한다. WinUI는 불변 스냅샷을 표시하고 명령을 제출할 뿐, 선택 집합·병합 의미론·텍스트 배치·효과 계산·외부 참조 갱신 규칙을 소유하지 않는다.
+
+```cpp
+using ExtendedLayerNode = std::variant<
+    RasterLayer,
+    GroupLayer,
+    AdjustmentLayer,
+    TextLayer,
+    FillLayer,
+    SmartObjectLayer>;
+
+struct LayerSelectionState {
+    std::vector<LayerId> orderedIds;
+    std::optional<LayerId> activeAnchor;
+};
+
+struct TextLayer {
+    LayerCommon common;
+    Utf8TextDocument text;
+    TextLayoutParameters layout;
+    AffineTransform transform;
+};
+
+struct FillLayer {
+    LayerCommon common;
+    VersionedFillParameters fill; // Solid, Linear/Radial Gradient, Pattern
+};
+
+struct SmartObjectLayer {
+    LayerCommon common;
+    SmartObjectSource source;     // EmbeddedAsset 또는 ExternalReference
+    AffineTransform transform;
+    CachedRepresentation fallback;
+};
+```
+
+- `LayerSelectionState`는 문서별 Application 상태다. ID는 중복 없이 레이어 트리 순서로 정규화하며 활성 anchor는 선택 집합에 포함한다. 선택 변경과 검색 조건 변경은 문서 내용을 바꾸지 않으므로 history 또는 dirty revision을 만들지 않는다.
+- 복수 레이어 이동과 속성 변경은 대상 ID를 명시한 composite command 하나로 실행한다. 실행 전에 모든 대상, 부모, 잠금 및 속성 값을 검증하고 하나라도 유효하지 않으면 아무것도 변경하지 않는다.
+- `TextLayer`는 UTF-8 본문, 문자 run, 문단/배치 속성, 폰트 descriptor와 transform을 보존한다. DirectWrite shaping은 `ITextLayoutService` 포트 뒤에 두며 DirectWrite/Win32 타입을 Core/Application 공개 헤더에 노출하지 않는다. 요청 폰트와 실제 대체 폰트를 구분해 진단한다.
+- `FillLayer`는 단색, 선형/방사형 gradient, pattern을 버전 있는 파라미터로 표현한다. 결과 픽셀은 파생 캐시이며 원본은 파라미터와 참조 자산이다.
+- `LayerEffectStack`은 각 레이어의 순서 있는 비파괴 속성이며 최소한 shadow, stroke, glow 계열을 수용한다. 각 effect는 안정된 ID, schema version, 활성 상태, 파라미터, 영향 반경(halo)을 가진다.
+- 색상 태그는 안정된 `LayerColorTag` 값으로 `LayerCommon`에 저장한다. 이름·종류·태그·가시성·잠금 상태 검색은 불변 `LayerTreeSnapshot`에 대한 `LayerQuery`로 수행하며 결과는 파생 상태다.
+- `SmartObjectSource`는 `.ocp` 자산 테이블의 embedded content 또는 정규화한 외부 파일 참조를 가리킨다. 외부 파일 identity, 마지막 확인 시각/해시 및 마지막 유효 렌더 캐시를 보존한다. 누락·변경은 자동으로 문서를 변형하지 않고 진단과 명시적 Refresh/Relink/Embed/Replace 명령을 생성한다.
+- `VectorShapeLayer`는 의도적으로 타입 집합에서 제외한다. Fill/Text 기능을 벡터 도형 편집, SVG 교환 또는 Vector Shape Layer 저장 계약으로 확장 해석하지 않는다.
+
+명령 계약은 다음을 추가한다.
+
+```text
+MergeDown, MergeVisible, FlattenDocument
+SetLayerSelection
+SetPropertiesForLayers, MoveLayers
+AddTextLayer, EditTextLayer, SetTextLayout
+AddFillLayer, SetFillParameters
+AddLayerEffect, UpdateLayerEffect, RemoveLayerEffect, ReorderLayerEffect
+SetLayerColorTags
+AddSmartObject, RefreshSmartObject, RelinkSmartObject, EmbedSmartObject, ReplaceSmartObject
+```
+
+- Merge Down은 같은 부모의 바로 아래 합성 가능한 형제와 선택 레이어를 합성한다. Merge Visible은 숨김 레이어를 보존하면서 보이는 기여분을 하나의 `RasterLayer`로 치환한다. Flatten은 보이는 문서 결과를 하나의 `RasterLayer`로 만들고 나머지 트리를 제거하며 숨김 데이터나 alpha 제거가 필요한 경우 interaction port로 사전 확인한다.
+- 세 병합 명령은 시작 revision의 불변 합성 스냅샷을 `ICompositeEvaluator`에 전달한다. 생성 타일과 제거 트리는 Copy-on-Write payload로 history에 보관하여 한 번의 Undo가 기존 ID, 순서, 속성, 선택 집합과 픽셀을 정확히 복원한다.
+- 비동기 텍스트 shaping, effect 계산, pattern decode 및 Smart Object refresh 결과는 문서 revision, 대상 `LayerId` 세대와 자산 version이 모두 일치할 때만 게시한다.
+
+렌더러는 확장 노드를 타일 기반 render graph로 컴파일한다. Text/Fill/Smart Object는 raster source pass를 만들고 effect stack은 명시적인 halo pass를 만든 뒤 기존 mask, clipping, opacity 및 blend pass로 들어간다. CPU 참조 경로와 D3D/HLSL 경로는 같은 파라미터 계약과 색공간 정책을 사용한다. 캐시 키에는 노드 ID, 노드 version, 원본 자산 version, effect version, 출력 tile 및 color context를 포함한다.
+
+`.ocp`는 각 확장 노드를 안정된 type ID와 schema version으로 기록하고 text run, fill/effect 파라미터, 색상 태그, embedded asset, 외부 참조 및 fallback cache를 보존한다. 큰 embedded content는 content hash 기반 자산 테이블로 중복 제거한다. 알 수 없는 미래 노드는 opaque payload와 대체 렌더를 함께 보존해 왕복 손실을 막는다.
+
+PSD codec은 Text Layer, Fill Layer, Layer Effects 및 Smart Object별 capability를 `CompatibilityReport`에 기록한다. 의미가 일치하는 구조만 편집 가능한 PSD 구조로 매핑하고, 안전하게 해석하지 못한 원본 블록은 opaque payload로 보존한다. 구조 보존이 불가능한 경우 저장 전에 rasterize/flatten 범위와 손실 항목을 사용자에게 명시해 승인을 받아야 한다. 색상 태그와 복수 선택 상태처럼 PSD 표현이 없거나 편집 세션에만 속한 정보는 PSD 출력 결과를 바꾸지 않으며 `.ocp`에 보존한다.
+
 ### Mask, channels, selection
 
 - 레이어 마스크와 선택 영역은 모두 문서 좌표계의 희소 단일 채널 타일로 저장하되 서로 다른 도메인 타입으로 구분한다.

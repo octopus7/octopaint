@@ -57,14 +57,14 @@
 
 | 후보 기능 | 필요한 이유 | 의존성·비용 | 검토 결정 |
 |---|---|---|---|
-| Merge Down·Merge Visible·Flatten | 복잡한 레이어를 의도적으로 단순화하고 외부 출력 전 결과를 고정한다. | compositor와 blend/mask/adjustment(`existing scope`), 호환성 경고, Undo 메모리. 비용: 중간~높음 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| 복수 레이어 선택과 일괄 속성 변경 | 이동·정렬·가시성·잠금을 여러 레이어에 한 번에 적용한다. | layer selection state, composite command, 부분 실패 없는 transaction. 비용: 중간 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| Text Layer와 텍스트 편집 | 이미지 편집기의 일반적인 제목·주석·디자인 작업을 지원한다. | DirectWrite shaping, 폰트 대체/포함 정책, 비파괴 text 모델, PSD 매핑. 비용: 매우 높음 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| Vector Shape Layer | 도형을 해상도 독립적으로 유지하고 나중에 수정할 수 있게 한다. | vector path 모델/renderer, fill/stroke, `.ocp` 및 PSD/SVG 변환. 비용: 매우 높음 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| Fill Layer | 단색·gradient·pattern을 비파괴 레이어로 유지한다. | 생성형 layer 노드, operator 파라미터, compositor와 포맷 저장. 비용: 높음 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| Layer Effects | 그림자, 외곽선, glow 같은 일반 디자인 효과를 비파괴로 제공한다. | 효과 그래프, halo 계산, CPU/GPU 일치, PSD 호환성. 비용: 매우 높음 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| Layer 색상 태그·검색·필터 | 큰 문서의 레이어 탐색 속도를 높인다. | metadata 스키마, layer snapshot/UI 검색, `.ocp` 보존. 비용: 낮음~중간 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| Linked 또는 Smart Object 계열 레이어 | 원본을 보존한 반복 배치와 외부 자산 갱신을 지원한다. | 중첩 문서/외부 참조, cache invalidation, 파일 이동·누락 처리, PSD 매핑. 비용: 매우 높음 | [ ] 채택 [ ] 보류 [ ] 제외 |
+| Merge Down·Merge Visible·Flatten | 복잡한 레이어를 의도적으로 단순화하고 외부 출력 전 결과를 고정한다. | compositor와 blend/mask/adjustment(`existing scope`), 호환성 경고, Undo 메모리. 비용: 중간~높음 | [x] 채택 [ ] 보류 [ ] 제외 |
+| 복수 레이어 선택과 일괄 속성 변경 | 이동·정렬·가시성·잠금을 여러 레이어에 한 번에 적용한다. | layer selection state, composite command, 부분 실패 없는 transaction. 비용: 중간 | [x] 채택 [ ] 보류 [ ] 제외 |
+| Text Layer와 텍스트 편집 | 이미지 편집기의 일반적인 제목·주석·디자인 작업을 지원한다. | DirectWrite shaping, 폰트 대체/포함 정책, 비파괴 text 모델, PSD 매핑. 비용: 매우 높음 | [x] 채택 [ ] 보류 [ ] 제외 |
+| Vector Shape Layer | 도형을 해상도 독립적으로 유지하고 나중에 수정할 수 있게 한다. | vector path 모델/renderer, fill/stroke, `.ocp` 및 PSD/SVG 변환. 비용: 매우 높음 | [ ] 채택 [ ] 보류 [x] 제외 |
+| Fill Layer | 단색·gradient·pattern을 비파괴 레이어로 유지한다. | 생성형 layer 노드, operator 파라미터, compositor와 포맷 저장. 비용: 높음 | [x] 채택 [ ] 보류 [ ] 제외 |
+| Layer Effects | 그림자, 외곽선, glow 같은 일반 디자인 효과를 비파괴로 제공한다. | 효과 그래프, halo 계산, CPU/GPU 일치, PSD 호환성. 비용: 매우 높음 | [x] 채택 [ ] 보류 [ ] 제외 |
+| Layer 색상 태그·검색·필터 | 큰 문서의 레이어 탐색 속도를 높인다. | metadata 스키마, layer snapshot/UI 검색, `.ocp` 보존. 비용: 낮음~중간 | [x] 채택 [ ] 보류 [ ] 제외 |
+| Linked 또는 Smart Object 계열 레이어 | 원본을 보존한 반복 배치와 외부 자산 갱신을 지원한다. | 중첩 문서/외부 참조, cache invalidation, 파일 이동·누락 처리, PSD 매핑. 비용: 매우 높음 | [x] 채택 [ ] 보류 [ ] 제외 |
 
 ## View / navigation
 
@@ -127,9 +127,9 @@
 
 ## 검토 결과 반영란
 
-- 검토자:
-- 검토 날짜:
-- 이번에 채택한 후보:
-- 보류 사유와 재검토 조건:
-- 제외 사유: Interchange 절 전체 제외 확정. 기존 확정 범위인 `.ocp`, PNG, JPEG, PSD는 유지.
-- 요구사항·아키텍처·`PROGRESS.md` 승격 작업 요청 링크 또는 기록:
+- 검토자: 사용자
+- 검토 날짜: 2026-08-06
+- 이번에 채택한 후보: Layers 절의 Merge Down·Merge Visible·Flatten, 복수 레이어 선택과 일괄 속성 변경, Text Layer와 텍스트 편집, Fill Layer, Layer Effects, Layer 색상 태그·검색·필터, Linked 또는 Smart Object 계열 레이어.
+- 보류 사유와 재검토 조건: 없음.
+- 제외 사유: Vector Shape Layer는 제품 범위에서 제외한다. Interchange 절 전체 제외 결정도 유지한다. 기존 확정 범위인 `.ocp`, PNG, JPEG, PSD는 유지한다.
+- 요구사항·아키텍처·`PROGRESS.md` 승격 작업 요청 링크 또는 기록: 2026-08-06 사용자 확정에 따라 `docs/PRODUCT_REQUIREMENTS.md`, `docs/EDITOR_ARCHITECTURE.md`, `PROGRESS.md`에 반영.

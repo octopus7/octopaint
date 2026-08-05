@@ -54,6 +54,28 @@ The initial blend-mode contract includes:
 
 Blend calculations must have a documented linear-light or encoded-color policy and produce deterministic CPU and GPU results within a defined tolerance.
 
+### Accepted advanced layer capabilities
+
+- Merge Down composites the selected layer into the immediately lower compositable sibling. Merge Visible replaces the visible contribution with one pixel layer while preserving hidden layers. Flatten replaces the document layer tree with one pixel layer representing the visible document result; discarding hidden data or transparency requires an explicit confirmation policy.
+- Merge Down, Merge Visible, and Flatten are each one atomic, undoable document command. Their output must honor masks, clipping, opacity, blend modes, adjustments, effects, color management, and the document bounds.
+- A document supports an ordered set of selected layer IDs and one active anchor layer. Move, ordering, visibility, locking, opacity, blend mode, color tag, and other applicable property changes can target multiple selected layers as one all-or-nothing command.
+- Text Layer stores editable Unicode text, text runs, paragraph/layout properties, font descriptors, transforms, and rasterization policy without exposing DirectWrite types in the document or application API.
+- Fill Layer non-destructively generates solid color, gradient, or pattern content from versioned parameters and can use the normal mask, opacity, blend, clipping, and effects pipeline.
+- Layer Effects provides an ordered, non-destructive effect stack including at least shadow, stroke, and glow families. Effects remain editable and have deterministic CPU reference output and matching accelerated output within a declared tolerance.
+- Layers support a persisted color tag. Search and filtering can match name, kind, tag, visibility, lock state, and other stable layer metadata without changing document content or layer order.
+- Linked/Smart Object layers support embedded content and external file references. Instances preserve source content, transforms, and a cached render; refresh, relink, embed, and replace operations are explicit undoable commands. A missing external source retains its last valid cached representation and reports a diagnostic.
+- Vector Shape Layer is explicitly excluded from the planned product scope. No vector shape editing model, SVG workflow, or Vector Shape Layer persistence is implied by the accepted Fill Layer or Text Layer requirements.
+
+Acceptance criteria:
+
+- Golden-document tests prove that Merge Down, Merge Visible, and Flatten match the reference compositor and that one undo restores the exact prior tree, IDs, properties, selection, and pixel payloads.
+- Multi-layer commands reject an invalid target before mutation and never leave a partially changed selection; undo and redo restore every target and the active anchor exactly.
+- Text, Fill, Effects, color tags, and Linked/Smart Object state survive `.ocp` save-load-save without semantic loss, including missing-link and unknown-version diagnostics.
+- Text remains editable after reload with deterministic layout for the same resolved fonts; missing fonts produce an explicit substitution report while preserving the requested font descriptor.
+- Fill and effect CPU/GPU golden tests agree within the renderer's documented tolerance at tile boundaries and effect halo boundaries.
+- Search/filter results are deterministic for the same immutable document snapshot and never create a history entry.
+- PSD import/export reports support per advanced layer capability. Supported mappings round-trip structurally; unsupported mappings are preserved as safe opaque data or require an explicit lossy flatten/rasterize decision before writing.
+
 ## Channels and masks
 
 - Composite color view and individual red, green, blue, and alpha channels
