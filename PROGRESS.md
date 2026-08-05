@@ -1,96 +1,102 @@
-# OctoPaint Progress
+# OctoPaint 진행 현황
 
-Last updated: 2026-08-06 KST
+최종 업데이트: 2026-08-06 KST
 
-This checklist is the repository-level implementation status. Completed items use `[x]`; active work and pending work remain unchecked and carry a status label.
+이 체크리스트는 저장소 수준의 구현 현황을 나타냅니다. 완료된 항목은 `[x]`로 표시하고, 진행 중이거나 대기 중인 작업은 체크하지 않은 채 상태 표기를 덧붙입니다.
 
-## Project foundation
+## 프로젝트 기반
 
-- [x] C++23 Visual Studio 2022 x64 solution
-- [x] Replaceable WinUI 3 frontend boundary
-- [x] UI-neutral Application API and platform-independent Core
-- [x] Product, editor architecture, and file-format design documents
-- [x] English, Korean, and Japanese README documents
-- [x] Repository ignore rules for generated native and Windows packaging output
+- [x] C++23 Visual Studio 2022 x64 솔루션
+- [x] 교체 가능한 WinUI 3 프런트엔드 경계
+- [x] UI 중립 Application API와 플랫폼 독립 Core
+- [x] 제품, 편집기 아키텍처 및 파일 형식 설계 문서
+- [x] 영어, 한국어 및 일본어 README 문서
+- [x] 생성된 네이티브 빌드 및 Windows 패키징 출력물에 대한 저장소 제외 규칙
+- [x] 후보 기능 검토 문서 `CANDIDATE_FEATURES.md`
 
-## Documents and history
+## 문서 및 작업 기록
 
-- [x] Multiple open documents with stable, non-reused document IDs
-- [x] Active document switching and closing
-- [x] Per-document undo and redo history
-- [x] Per-document saved revision and dirty-state tracking
-- [ ] 🚧 Layer commands integrated with document history and snapshots
-- [ ] Autosave and crash-recovery journal
+- [x] 안정적이며 재사용되지 않는 문서 ID를 사용하는 다중 문서 열기
+- [x] 활성 문서 전환 및 닫기
+- [x] 문서별 실행 취소 및 다시 실행 기록
+- [x] 문서별 저장 리비전 및 변경 상태 추적
+- [ ] 🚧 문서 작업 기록 및 스냅샷에 레이어 명령 통합
+- [ ] 자동 저장 및 충돌 복구 저널
 
-## Raster and layer core
+## 래스터 및 레이어 코어
 
-- [x] Fixed 256×256 premultiplied RGBA8 tiles
-- [x] Sparse tile allocation and transparent-tile removal
-- [x] Immutable tile payload sharing and tile-level Copy-on-Write
-- [x] Raster and group layers with stable IDs
-- [x] Ordered nested layer tree with validated insert, remove, and move
-- [x] Blend-mode domain contract
-- [ ] 🚧 Layer opacity/alpha lock in domain, snapshots, commands, and tests
-- [ ] Raster layer masks and clipping relationships
-- [ ] Composite, RGB, alpha, and named channels
+- [x] 고정 크기 256×256 premultiplied RGBA8 타일
+- [x] 희소 타일 할당 및 투명 타일 제거
+- [x] 불변 타일 페이로드 공유 및 타일 단위 Copy-on-Write
+- [x] 안정적인 ID를 사용하는 래스터 및 그룹 레이어
+- [x] 삽입, 제거 및 이동을 검증하는 순서형 중첩 레이어 트리
+- [x] 블렌딩 모드 도메인 계약
+- [ ] 🚧 도메인, 스냅샷, 명령 및 테스트에 레이어 불투명도/투명도 잠금 통합
+- [ ] 래스터 레이어 마스크 및 클리핑 관계
+- [ ] 합성, RGB, 알파 및 이름 지정 채널
 
-## Painting and selection tools
+## 페인팅 및 선택 도구
 
-- [ ] 🚧 Non-antialiased connected-pixel Pencil engine and tests
-- [ ] 🚧 Deterministic time/pressure Airbrush engine and tests
-- [ ] 🚧 Rectangular and elliptical marquee mask generation
-- [ ] 🚧 Freehand and polygonal lasso mask generation
-- [ ] 🚧 Move Layer command integration
-- [ ] Selection replace, add, subtract, and intersect modes
-- [ ] Tool preview overlays and one-command gesture commit
+- [ ] 🚧 앤티앨리어싱 없는 연결 픽셀 방식 Pencil 엔진 및 테스트
+- [ ] 🚧 결정론적 시간/압력 기반 Airbrush 엔진 및 테스트
+- [ ] 🚧 브러시 크기·경도·간격·Flow·Opacity 옵션
+- [ ] 🚧 압력에 따른 dab size 및 opacity 적용 토글
+- [ ] 🚧 Stroke Stabilizer
+- [ ] 🚧 사각형 및 타원형 선택 윤곽 마스크 생성
+- [ ] 🚧 자유형 및 다각형 올가미 마스크 생성
+- [ ] 🚧 Move Layer 명령 통합
+- [ ] 선택 영역 바꾸기, 추가, 빼기 및 교차 모드
+- [ ] 도구 미리보기 오버레이 및 제스처당 단일 명령 확정
 
-## WinUI editor shell
+## WinUI 편집기 셸
 
-- [x] Native `OctoPaint.exe` and `OctoPaint` window title
-- [x] Basic document creation shell
-- [ ] 🚧 Multi-document tab projection
-- [ ] 🚧 Left vertical tool toolbar with mutually exclusive active tool
-- [ ] 🚧 Overlapping foreground/background color swatches with swap/reset
-- [ ] 🚧 HSV/alpha picker synchronized with RGB and hexadecimal values
-- [ ] Layer panel projection and layer property controls
-- [ ] Canvas viewport, zoom, pan, rulers, and guides
+- [x] 네이티브 `OctoPaint.exe` 및 `OctoPaint` 창 제목
+- [x] 기본 문서 생성 셸
+- [ ] 🚧 다중 문서 탭 표시
+- [ ] 🚧 상단 메뉴바 아래 Tool Options Bar
+- [ ] 🚧 스타일러스 감도 설정 대화상자
+- [ ] 🚧 상호 배타적인 활성 도구를 제공하는 왼쪽 세로 도구 모음
+- [ ] 🚧 교체/초기화 기능이 있는 겹쳐진 전경색/배경색 견본
+- [ ] 🚧 RGB 및 16진수 값과 동기화되는 HSV/알파 색상 선택기
+- [ ] 레이어 패널 표시 및 레이어 속성 컨트롤
+- [ ] 캔버스 뷰포트, 확대/축소, 이동, 눈금자 및 안내선
 
-## Rendering and image operations
+## 렌더링 및 이미지 작업
 
-- [ ] Direct3D canvas renderer with CPU correctness fallback
-- [ ] Blend-mode compositor
-- [ ] Brightness/contrast adjustment
-- [ ] Hue/saturation and color adjustment
-- [ ] Curves adjustment
-- [ ] Desaturation adjustment
-- [ ] Gaussian blur
+- [ ] CPU 정확성 폴백을 포함한 Direct3D 캔버스 렌더러
+- [ ] 블렌딩 모드 합성기
+- [ ] 명도/대비 조정
+- [ ] 색조/채도 및 색상 조정
+- [ ] Curves 조정
+- [ ] Desaturation 조정
+- [ ] Gaussian Blur
 - [ ] Crop
-- [ ] Nine-anchor canvas resize
-- [ ] Percentage and pixel-based image resampling
+- [ ] 9방향 기준점 Canvas Resize
+- [ ] 비율 및 픽셀 단위 Image Resampling
 
-## Persistence and interoperability
+## 저장 및 상호운용성
 
-- [ ] Native layered `.ocp` read/write with validation and atomic replacement
-- [ ] PNG read/write
-- [ ] JPEG read/write with explicit transparency flattening
-- [ ] PSD layer-aware read/write
-- [ ] PSD compatibility and lossy-conversion report
+- [ ] 검증 및 원자적 교체를 지원하는 고유 레이어 형식 `.ocp` 읽기/쓰기
+- [ ] PNG 읽기/쓰기
+- [ ] 명시적 투명도 병합을 지원하는 JPEG 읽기/쓰기
+- [ ] 레이어를 인식하는 PSD 읽기/쓰기
+- [ ] PSD 호환성 및 손실 변환 보고서
 
-## Build, packaging, and verification
+## 빌드, 패키징 및 검증
 
-- [x] Headless Core tests
-- [x] Application multi-document/history tests
-- [x] Sparse tile and layer-domain tests
-- [x] Version source in `VERSION`
-- [x] Versioned `OctoPaint-<version>-win-x64.zip` build flow
-- [x] Versioned `OctoPaint-<version>-win-x64.msi` WiX build definition
-- [x] ZIP content verification
-- [ ] MSI compilation verification on a machine with WiX Toolset 5 or newer
-- [ ] Continuous integration build and test workflow
-- [ ] Performance and large-document stress tests
+- [x] 헤드리스 Core 테스트
+- [x] Application 다중 문서/작업 기록 테스트
+- [x] 희소 타일 및 레이어 도메인 테스트
+- [x] `VERSION` 버전 정보 원본
+- [x] 버전을 포함한 `OctoPaint-<version>-win-x64.zip` 빌드 흐름
+- [x] 버전을 포함한 `OctoPaint-<version>-win-x64.msi` WiX 빌드 정의
+- [x] ZIP 내용 검증
+- [ ] WiX Toolset 5 이상이 설치된 컴퓨터에서 MSI 컴파일 검증
+- [ ] 지속적 통합 빌드 및 테스트 워크플로
+- [ ] 성능 및 대용량 문서 스트레스 테스트
 
-## Current delivery slice
+## 현재 제공 범위
 
-- [ ] 🚧 Finish and integrate the tool engine, WinUI toolbar/color picker, and document-layer commands
-- [ ] Run a complete Debug x64 solution build and all headless test executables
-- [ ] Commit and immediately push each independently completed work unit
+- [ ] 🚧 도구 엔진, WinUI 도구 모음/색상 선택기 및 문서-레이어 명령 완성 및 통합
+- [ ] 전체 Debug x64 솔루션 빌드 및 모든 헤드리스 테스트 실행
+- [ ] 독립적으로 완료된 각 작업 단위를 커밋한 뒤 즉시 푸시
