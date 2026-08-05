@@ -50,3 +50,11 @@
 - Include the corresponding completed `REQUESTS.md` record in the commit for an implementation or change request.
 - Do not commit partial work merely to separate files; a commit must represent a coherent completed outcome.
 - When additional steering introduces a logically separate task, complete and commit it separately from the work already in progress.
+
+## README localization
+
+- Keep `README.md` as the default English README.
+- Provide Korean and Japanese translations as `README_KO.md` and `README_JA.md`.
+- Use an uppercase ISO-style two-letter language suffix for translated README filenames.
+- At the top of each README, link to the other language versions of the same document; omit the link to the current document.
+- Keep the three README files semantically equivalent whenever README content changes.
