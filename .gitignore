@@ -1,0 +1,46 @@
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.opendb
+*.opendb
+
+# Native build output
+out/
+build/
+cmake-build-*/
+ipch/
+Generated Files/
+*.iobj
+*.ipdb
+*.obj
+*.pch
+*.pdb
+*.ilk
+*.tlog
+*.lastbuildstate
+
+# NuGet
+packages/
+*.nupkg
+
+# Windows packaging
+AppPackages/
+BundleArtifacts/
+*.appx
+*.appxbundle
+*.appxsym
+*.appxupload
+*.msix
+*.msixbundle
+*.msixupload
+
+# Test and profiling output
+TestResults/
+*.coverage
+*.coveragexml
+*.vsp
+*.vspx
