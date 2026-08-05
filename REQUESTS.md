@@ -115,3 +115,25 @@
 - 번역 문서는 대문자 2자 언어 접미사를 사용해 `README_KO.md`, `README_JA.md`로 명명한다.
 - 각 문서는 자기 자신으로 연결하지 않고 다른 언어 문서만 상단에 표시한다.
 - README 내용이 변경되면 세 언어 문서의 의미와 구조를 함께 갱신한다.
+
+---
+
+# 요청 시작: 2026-08-06 00:13:22 KST | 작업 완료: 2026-08-06 00:30:16 KST (소요 시간: 16분 54초)
+
+## 구현 내역
+
+- Visual Studio 2022용 C++23 솔루션 `OctoPaint.sln`을 구성했다.
+- 표준 C++ 전용 `OctoPaint.Core`, UI 중립 `OctoPaint.Application`, 교체 가능한 WinUI 3 실행 어댑터를 분리했다.
+- Application 공개 API에 WinUI, WinRT, Win32와 Direct3D 타입이 노출되지 않도록 PImpl 기반 경계를 구현했다.
+- WinUI 3 최소 창, 도구·레이어 패널 자리, 문서 생성 명령과 상태 스냅샷 투영을 구현했다.
+- 제품 프로젝트 파일을 `OctoPaint.vcxproj`, 솔루션 표시명을 `OctoPaint`, 실행 파일을 `OctoPaint.exe`, 창 제목을 `OctoPaint`로 통일했다.
+- UI 없이 Core/Application을 검증하는 `OctoPaint.Core.Tests` 실행 테스트를 추가했다.
+- 프런트엔드 교체 규칙과 의존성 방향을 `docs/ARCHITECTURE.md`에 문서화했다.
+
+## 결정 내용
+
+- 프런트엔드는 Application 명령과 값 스냅샷만 사용하며 문서 모델을 직접 변경하지 않는다.
+- Core는 C++23 표준 라이브러리만 사용하고 플랫폼별 UI와 렌더링은 바깥쪽 어댑터로 둔다.
+- 설치된 MSVC 14.38이 `/std:c++23preview`를 인식하지 않으므로, C++23 기능을 사용할 수 있는 `/std:c++latest` 모드로 빌드한다.
+- WinUI 3 앱은 현재 unpackaged 구성을 사용하며 Windows App SDK 의존성은 Native NuGet 참조로 복원한다.
+- 내부 라이브러리와 namespace는 책임을 구분하기 위해 한정 이름을 유지하되 사용자에게 노출되는 앱 이름은 모두 `OctoPaint`로 통일한다.

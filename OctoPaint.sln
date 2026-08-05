@@ -1,0 +1,39 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36310.24
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "OctoPaint.Core", "src\OctoPaint.Core\OctoPaint.Core.vcxproj", "{6CBA5B82-9CE0-4E11-B4BC-F22235E23168}"
+EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "OctoPaint.Application", "src\OctoPaint.Application\OctoPaint.Application.vcxproj", "{C4B74C54-B6A0-4E6F-A255-486BD9E4D31E}"
+EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "OctoPaint", "src\OctoPaint.WinUI\OctoPaint.vcxproj", "{070B8438-D847-48E5-9698-A8C838D226F8}"
+EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "OctoPaint.Core.Tests", "tests\OctoPaint.Core.Tests\OctoPaint.Core.Tests.vcxproj", "{19735D50-050B-4B85-91F8-F4C9DDA0B7F8}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6CBA5B82-9CE0-4E11-B4BC-F22235E23168}.Debug|x64.ActiveCfg = Debug|x64
+		{6CBA5B82-9CE0-4E11-B4BC-F22235E23168}.Debug|x64.Build.0 = Debug|x64
+		{6CBA5B82-9CE0-4E11-B4BC-F22235E23168}.Release|x64.ActiveCfg = Release|x64
+		{6CBA5B82-9CE0-4E11-B4BC-F22235E23168}.Release|x64.Build.0 = Release|x64
+		{C4B74C54-B6A0-4E6F-A255-486BD9E4D31E}.Debug|x64.ActiveCfg = Debug|x64
+		{C4B74C54-B6A0-4E6F-A255-486BD9E4D31E}.Debug|x64.Build.0 = Debug|x64
+		{C4B74C54-B6A0-4E6F-A255-486BD9E4D31E}.Release|x64.ActiveCfg = Release|x64
+		{C4B74C54-B6A0-4E6F-A255-486BD9E4D31E}.Release|x64.Build.0 = Release|x64
+		{070B8438-D847-48E5-9698-A8C838D226F8}.Debug|x64.ActiveCfg = Debug|x64
+		{070B8438-D847-48E5-9698-A8C838D226F8}.Debug|x64.Build.0 = Debug|x64
+		{070B8438-D847-48E5-9698-A8C838D226F8}.Release|x64.ActiveCfg = Release|x64
+		{070B8438-D847-48E5-9698-A8C838D226F8}.Release|x64.Build.0 = Release|x64
+		{19735D50-050B-4B85-91F8-F4C9DDA0B7F8}.Debug|x64.ActiveCfg = Debug|x64
+		{19735D50-050B-4B85-91F8-F4C9DDA0B7F8}.Debug|x64.Build.0 = Debug|x64
+		{19735D50-050B-4B85-91F8-F4C9DDA0B7F8}.Release|x64.ActiveCfg = Release|x64
+		{19735D50-050B-4B85-91F8-F4C9DDA0B7F8}.Release|x64.Build.0 = Release|x64
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

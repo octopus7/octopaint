@@ -1,0 +1,108 @@
+{
+  "format": 1,
+  "restore": {
+    "D:\\github\\octopaint\\src\\OctoPaint.WinUI\\OctoPaint.WinUI.vcxproj": {}
+  },
+  "projects": {
+    "D:\\github\\octopaint\\src\\OctoPaint.Application\\OctoPaint.Application.vcxproj": {
+      "restore": {
+        "projectUniqueName": "D:\\github\\octopaint\\src\\OctoPaint.Application\\OctoPaint.Application.vcxproj",
+        "projectName": "OctoPaint.Application",
+        "projectPath": "D:\\github\\octopaint\\src\\OctoPaint.Application\\OctoPaint.Application.vcxproj",
+        "UsingMicrosoftNETSdk": false,
+        "frameworks": {
+          "native": {
+            "projectReferences": {
+              "D:\\github\\octopaint\\src\\OctoPaint.Core\\OctoPaint.Core.vcxproj": {
+                "projectPath": "D:\\github\\octopaint\\src\\OctoPaint.Core\\OctoPaint.Core.vcxproj"
+              }
+            }
+          }
+        }
+      },
+      "frameworks": {
+        "native": {}
+      }
+    },
+    "D:\\github\\octopaint\\src\\OctoPaint.Core\\OctoPaint.Core.vcxproj": {
+      "restore": {
+        "projectUniqueName": "D:\\github\\octopaint\\src\\OctoPaint.Core\\OctoPaint.Core.vcxproj",
+        "projectName": "OctoPaint.Core",
+        "projectPath": "D:\\github\\octopaint\\src\\OctoPaint.Core\\OctoPaint.Core.vcxproj",
+        "UsingMicrosoftNETSdk": false,
+        "frameworks": {
+          "native": {
+            "projectReferences": {}
+          }
+        }
+      },
+      "frameworks": {
+        "native": {}
+      }
+    },
+    "D:\\github\\octopaint\\src\\OctoPaint.WinUI\\OctoPaint.WinUI.vcxproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "D:\\github\\octopaint\\src\\OctoPaint.WinUI\\OctoPaint.WinUI.vcxproj",
+        "projectName": "OctoPaint.WinUI",
+        "projectPath": "D:\\github\\octopaint\\src\\OctoPaint.WinUI\\OctoPaint.WinUI.vcxproj",
+        "packagesPath": "C:\\Users\\CodexSandboxOffline\\.nuget\\packages\\",
+        "outputPath": "D:\\github\\octopaint\\src\\OctoPaint.WinUI\\obj\\",
+        "projectStyle": "PackageReference",
+        "skipContentFileWrite": true,
+        "UsingMicrosoftNETSdk": false,
+        "fallbackFolders": [
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\blendue\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "native"
+        ],
+        "sources": {
+          "C:\\Users\\blendue\\.nuget\\packages": {}
+        },
+        "frameworks": {
+          "native": {
+            "projectReferences": {
+              "D:\\github\\octopaint\\src\\OctoPaint.Application\\OctoPaint.Application.vcxproj": {
+                "projectPath": "D:\\github\\octopaint\\src\\OctoPaint.Application\\OctoPaint.Application.vcxproj"
+              }
+            }
+          }
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        }
+      },
+      "frameworks": {
+        "native": {
+          "dependencies": {
+            "Microsoft.Windows.CppWinRT": {
+              "target": "Package",
+              "version": "[3.0.260520.1, )"
+            },
+            "Microsoft.Windows.ImplementationLibrary": {
+              "target": "Package",
+              "version": "[1.0.260126.7, )"
+            },
+            "Microsoft.WindowsAppSDK": {
+              "target": "Package",
+              "version": "[2.2.0, )"
+            }
+          }
+        }
+      },
+      "runtimes": {
+        "win10-x64": {
+          "#import": []
+        }
+      }
+    }
+  }
+}
