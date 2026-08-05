@@ -47,3 +47,4 @@ TestResults/
 *.coveragexml
 *.vsp
 *.vspx
+/.tmp
