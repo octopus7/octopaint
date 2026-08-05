@@ -244,25 +244,25 @@
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Margin="0,6,0,8" Spacing="1">
                             <ToggleButton x:Name="PencilToolButton" Tag="Pencil" IsChecked="True" Click="ToolButton_Click" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Pencil" AutomationProperties.Name="Pencil tool">
-                                <TextBlock Text="✎" />
+                                <Image Width="32" Height="32" Source="Assets/Generated/Tools/pencil.png" />
                             </ToggleButton>
                             <ToggleButton x:Name="AirbrushToolButton" Tag="Airbrush" Click="ToolButton_Click" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Airbrush" AutomationProperties.Name="Airbrush tool">
-                                <TextBlock Text="✺" />
+                                <Image Width="32" Height="32" Source="Assets/Generated/Tools/airbrush.png" />
                             </ToggleButton>
                             <ToggleButton x:Name="RectangularMarqueeToolButton" Tag="Rectangular Marquee" Click="ToolButton_Click" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Rectangular Marquee" AutomationProperties.Name="Rectangular marquee selection tool">
-                                <TextBlock Text="▭" />
+                                <Image Width="32" Height="32" Source="Assets/Generated/Tools/rectangular-marquee.png" />
                             </ToggleButton>
                             <ToggleButton x:Name="EllipticalMarqueeToolButton" Tag="Elliptical Marquee" Click="ToolButton_Click" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Elliptical Marquee" AutomationProperties.Name="Elliptical marquee selection tool">
-                                <TextBlock Text="◯" />
+                                <Image Width="32" Height="32" Source="Assets/Generated/Tools/elliptical-marquee.png" />
                             </ToggleButton>
                             <ToggleButton x:Name="FreehandLassoToolButton" Tag="Freehand Lasso" Click="ToolButton_Click" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Freehand Lasso" AutomationProperties.Name="Freehand lasso selection tool">
-                                <TextBlock Text="〰" />
+                                <Image Width="32" Height="32" Source="Assets/Generated/Tools/freehand-lasso.png" />
                             </ToggleButton>
                             <ToggleButton x:Name="PolygonalLassoToolButton" Tag="Polygonal Lasso" Click="ToolButton_Click" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Polygonal Lasso" AutomationProperties.Name="Polygonal lasso selection tool">
-                                <TextBlock Text="◇" />
+                                <Image Width="32" Height="32" Source="Assets/Generated/Tools/polygonal-lasso.png" />
                             </ToggleButton>
                             <ToggleButton x:Name="MoveLayerToolButton" Tag="Move Layer" Click="ToolButton_Click" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Move Layer" AutomationProperties.Name="Move layer tool">
-                                <TextBlock Text="✥" />
+                                <Image Width="32" Height="32" Source="Assets/Generated/Tools/move-layer.png" />
                             </ToggleButton>
                         </StackPanel>
                     </ScrollViewer>
@@ -323,6 +323,68 @@
             <TextBlock x:Name="StatusText" />
         </Border>
 
+        <Grid
+            x:Name="SplashOverlay"
+            Grid.RowSpan="5"
+            Canvas.ZIndex="100"
+            Background="#FFFDFD"
+            Loaded="SplashOverlay_Loaded">
+            <Grid.Resources>
+                <Storyboard x:Name="SplashMotionStoryboard" AutoReverse="True" RepeatBehavior="Forever">
+                    <DoubleAnimation Storyboard.TargetName="SplashBackgroundTransform" Storyboard.TargetProperty="TranslateX" From="-10" To="10" Duration="0:0:12" />
+                    <DoubleAnimation Storyboard.TargetName="SplashBackgroundTransform" Storyboard.TargetProperty="TranslateY" From="-5" To="5" Duration="0:0:10" />
+                    <DoubleAnimation Storyboard.TargetName="SplashBackgroundTransform" Storyboard.TargetProperty="ScaleX" From="1.04" To="1.07" Duration="0:0:14" />
+                    <DoubleAnimation Storyboard.TargetName="SplashBackgroundTransform" Storyboard.TargetProperty="ScaleY" From="1.04" To="1.07" Duration="0:0:14" />
+                    <DoubleAnimation Storyboard.TargetName="SplashCharacterTransform" Storyboard.TargetProperty="TranslateX" From="4" To="-4" Duration="0:0:9" />
+                    <DoubleAnimation Storyboard.TargetName="SplashCharacterTransform" Storyboard.TargetProperty="TranslateY" From="2" To="-3" Duration="0:0:8" />
+                    <DoubleAnimation Storyboard.TargetName="SplashCharacterTransform" Storyboard.TargetProperty="ScaleX" From="1" To="1.015" Duration="0:0:11" />
+                    <DoubleAnimation Storyboard.TargetName="SplashCharacterTransform" Storyboard.TargetProperty="ScaleY" From="1" To="1.015" Duration="0:0:11" />
+                </Storyboard>
+            </Grid.Resources>
+
+            <Image
+                x:Name="SplashFallbackImage"
+                Source="Assets/Generated/Splash/octopaint-splash.png"
+                Stretch="UniformToFill"
+                Visibility="Collapsed" />
+            <Image
+                x:Name="SplashBackgroundImage"
+                Source="Assets/Generated/Splash/octopaint-splash-background.png"
+                Stretch="UniformToFill"
+                RenderTransformOrigin="0.5,0.5">
+                <Image.RenderTransform>
+                    <CompositeTransform x:Name="SplashBackgroundTransform" ScaleX="1.04" ScaleY="1.04" />
+                </Image.RenderTransform>
+            </Image>
+            <Image
+                x:Name="SplashCharacterImage"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Bottom"
+                MaxWidth="900"
+                MaxHeight="900"
+                Source="Assets/Generated/Splash/octopaint-splash-character.png"
+                Stretch="Uniform"
+                RenderTransformOrigin="0.5,0.5">
+                <Image.RenderTransform>
+                    <CompositeTransform x:Name="SplashCharacterTransform" />
+                </Image.RenderTransform>
+            </Image>
+
+            <StackPanel
+                HorizontalAlignment="Right"
+                VerticalAlignment="Bottom"
+                Margin="24"
+                Spacing="2">
+                <TextBlock
+                    HorizontalAlignment="Right"
+                    Foreground="#CC1B1B1B"
+                    Text="by octopus7" />
+                <HyperlinkButton
+                    HorizontalAlignment="Right"
+                    Content="Open repository"
+                    Click="RepositoryLink_Click"
+                    AutomationProperties.Name="Open the OctoPaint repository" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>
-

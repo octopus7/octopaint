@@ -1,15 +1,17 @@
 #pragma once
 
 #include "MainWindow.g.h"
+#include "ToolOptionsState.h"
 
-#include <octopaint/application/EditorState.h>
 #include <octopaint/application/Workspace.h>
+
+#include <array>
 
 namespace winrt::OctoPaint::WinUI::implementation
 {
     struct MainWindow : MainWindowT<MainWindow>
     {
-        MainWindow() = default;
+        MainWindow();
 
         void RootGrid_Loaded(
             Windows::Foundation::IInspectable const& sender,
@@ -71,6 +73,13 @@ namespace winrt::OctoPaint::WinUI::implementation
             Microsoft::UI::Xaml::Controls::TabView const& sender,
             Microsoft::UI::Xaml::Controls::TabViewTabCloseRequestedEventArgs const& event_args);
 
+        void SplashOverlay_Loaded(
+            Windows::Foundation::IInspectable const& sender,
+            Microsoft::UI::Xaml::RoutedEventArgs const& event_args);
+
+        void RepositoryLink_Click(
+            Windows::Foundation::IInspectable const& sender,
+            Microsoft::UI::Xaml::RoutedEventArgs const& event_args);
 
         void ToolOptionNumberBox_ValueChanged(
             Microsoft::UI::Xaml::Controls::NumberBox const& sender,
@@ -112,7 +121,7 @@ namespace winrt::OctoPaint::WinUI::implementation
         void RefreshView();
         void RefreshDocumentTabs(octopaint::application::WorkspaceSnapshot const& snapshot);
         void SelectTool(Microsoft::UI::Xaml::Controls::Primitives::ToggleButton const& selected_button);
-        void ProjectEditorStateToControls();
+        void ProjectToolOptionsToControls();
         void CaptureToolOptionsFromControls();
         void UpdatePointerDevice(Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args);
         [[nodiscard]] static bool IsChecked(Microsoft::UI::Xaml::Controls::Primitives::ToggleButton const& toggle);
@@ -130,14 +139,12 @@ namespace winrt::OctoPaint::WinUI::implementation
         [[nodiscard]] HsvaColor const& EditingTarget() const noexcept;
         [[nodiscard]] static RgbaColor ToRgba(HsvaColor const& color) noexcept;
         [[nodiscard]] static HsvaColor ToHsva(RgbaColor const& color) noexcept;
-        [[nodiscard]] static RgbaColor ToRgba(octopaint::application::EditorColor color) noexcept;
-        [[nodiscard]] static octopaint::application::EditorColor ToEditorColor(RgbaColor color) noexcept;
         [[nodiscard]] static Microsoft::UI::Xaml::Media::SolidColorBrush ColorBrush(HsvaColor const& color);
 
         octopaint::application::Workspace workspace_;
-        octopaint::application::EditorState editor_state_;
         std::uint32_t next_document_number_{ 1 };
         std::vector<octopaint::application::DocumentId> tab_document_ids_;
+        hstring selected_tool_{ L"Pencil" };
 
         HsvaColor foreground_color_{ 0.0, 0.0, 0.0, 1.0 };
         HsvaColor background_color_{ 0.0, 0.0, 1.0, 1.0 };
@@ -148,6 +155,8 @@ namespace winrt::OctoPaint::WinUI::implementation
         bool suppress_tab_events_{};
         bool suppress_tool_option_events_{};
         bool stylus_detected_{};
+        octopaint::winui::ToolOptionsState tool_options_{};
+        Microsoft::UI::Xaml::DispatcherTimer splash_timer_{ nullptr };
     };
 }
 
@@ -157,4 +166,3 @@ namespace winrt::OctoPaint::WinUI::factory_implementation
     {
     };
 }
-

@@ -9,6 +9,8 @@
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of OctoPaint is already installed." />
     <MediaTemplate EmbedCab="yes" />
+    <Icon Id="OctoPaintIcon" SourceFile="$(sys.SOURCEFILEDIR)..\src\OctoPaint.WinUI\Assets\OctoPaint.ico" />
+    <Property Id="ARPPRODUCTICON" Value="OctoPaintIcon" />
 
     <StandardDirectory Id="ProgramFiles6432Folder">
       <Directory Id="INSTALLFOLDER" Name="OctoPaint" />
@@ -31,6 +33,7 @@
           Name="OctoPaint"
           Description="OctoPaint"
           Target="[INSTALLFOLDER]OctoPaint.exe"
+          Icon="OctoPaintIcon"
           WorkingDirectory="INSTALLFOLDER" />
         <RemoveFolder Id="RemoveOctoPaintProgramMenuFolder" On="uninstall" />
         <RegistryValue

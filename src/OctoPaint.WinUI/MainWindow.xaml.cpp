@@ -6,11 +6,13 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <charconv>
+#include <chrono>
 #include <cmath>
+#include <filesystem>
 #include <format>
 #include <limits>
-#include <string_view>
 
 namespace winrt::OctoPaint::WinUI::implementation
 {
@@ -26,21 +28,21 @@ namespace winrt::OctoPaint::WinUI::implementation
             auto const value = box.Value();
             return std::isnan(value) ? 0.0 : std::clamp(std::round(value), 0.0, 255.0);
         }
+    }
 
-        [[nodiscard]] std::string_view ToolName(octopaint::application::EditorTool const tool) noexcept
+    MainWindow::MainWindow()
+    {
+        std::array<wchar_t, MAX_PATH> executable_path{};
+        auto const path_length = GetModuleFileNameW(
+            nullptr,
+            executable_path.data(),
+            static_cast<DWORD>(executable_path.size()));
+
+        if (path_length > 0 && path_length < executable_path.size())
         {
-            using octopaint::application::EditorTool;
-            switch (tool)
-            {
-            case EditorTool::Pencil: return "Pencil";
-            case EditorTool::Airbrush: return "Airbrush";
-            case EditorTool::RectangularMarquee: return "Rectangular Marquee";
-            case EditorTool::EllipticalMarquee: return "Elliptical Marquee";
-            case EditorTool::FreehandLasso: return "Freehand Lasso";
-            case EditorTool::PolygonalLasso: return "Polygonal Lasso";
-            case EditorTool::MoveLayer: return "Move Layer";
-            }
-            return "Unknown";
+            auto const icon_path = std::filesystem::path(executable_path.data())
+                .parent_path() / L"Assets" / L"OctoPaint.ico";
+            AppWindow().SetIcon(winrt::hstring(icon_path.wstring()));
         }
     }
 
@@ -48,7 +50,9 @@ namespace winrt::OctoPaint::WinUI::implementation
         [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
         [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
     {
-        ProjectEditorStateToControls();
+        ForegroundSwatchPreview().Background(ColorBrush(foreground_color_));
+        BackgroundSwatchPreview().Background(ColorBrush(background_color_));
+        ProjectToolOptionsToControls();
         RefreshView();
     }
 
@@ -89,8 +93,9 @@ namespace winrt::OctoPaint::WinUI::implementation
         [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
     {
         CloseColorEditorBeforeExternalChange();
-        editor_state_.SwapColors();
-        ProjectEditorStateToControls();
+        std::swap(foreground_color_, background_color_);
+        ForegroundSwatchPreview().Background(ColorBrush(foreground_color_));
+        BackgroundSwatchPreview().Background(ColorBrush(background_color_));
     }
 
     void MainWindow::ResetColors_Click(
@@ -98,8 +103,10 @@ namespace winrt::OctoPaint::WinUI::implementation
         [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
     {
         CloseColorEditorBeforeExternalChange();
-        editor_state_.ResetColors();
-        ProjectEditorStateToControls();
+        foreground_color_ = { 0.0, 0.0, 0.0, 1.0 };
+        background_color_ = { 0.0, 0.0, 1.0, 1.0 };
+        ForegroundSwatchPreview().Background(ColorBrush(foreground_color_));
+        BackgroundSwatchPreview().Background(ColorBrush(background_color_));
     }
 
     void MainWindow::ColorSlider_ValueChanged(
@@ -190,8 +197,8 @@ namespace winrt::OctoPaint::WinUI::implementation
     {
         if (color_edit_active_)
         {
+            RestoreEditingColor();
             color_edit_active_ = false;
-            ProjectEditorStateToControls();
         }
     }
 
@@ -226,6 +233,44 @@ namespace winrt::OctoPaint::WinUI::implementation
         }
     }
 
+    void MainWindow::SplashOverlay_Loaded(
+        [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
+        [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
+    {
+        auto const animations_enabled = Windows::UI::ViewManagement::UISettings{}.AnimationsEnabled();
+        if (animations_enabled)
+        {
+            SplashMotionStoryboard().Begin();
+        }
+        else
+        {
+            SplashBackgroundImage().Visibility(Microsoft::UI::Xaml::Visibility::Collapsed);
+            SplashCharacterImage().Visibility(Microsoft::UI::Xaml::Visibility::Collapsed);
+            SplashFallbackImage().Visibility(Microsoft::UI::Xaml::Visibility::Visible);
+        }
+
+        splash_timer_ = Microsoft::UI::Xaml::DispatcherTimer{};
+        splash_timer_.Interval(std::chrono::seconds(5));
+        splash_timer_.Tick([weak_this = get_weak()](auto const&, auto const&)
+        {
+            if (auto const self = weak_this.get())
+            {
+                self->splash_timer_.Stop();
+                self->SplashMotionStoryboard().Stop();
+                self->SplashOverlay().Visibility(Microsoft::UI::Xaml::Visibility::Collapsed);
+            }
+        });
+        splash_timer_.Start();
+    }
+
+    void MainWindow::RepositoryLink_Click(
+        [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
+        [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
+    {
+        [[maybe_unused]] auto const launch_operation = Windows::System::Launcher::LaunchUriAsync(
+            Windows::Foundation::Uri{ L"https://github.com/octopus7/octopaint" });
+    }
+
     void MainWindow::ToolOptionNumberBox_ValueChanged(
         [[maybe_unused]] Microsoft::UI::Xaml::Controls::NumberBox const& sender,
         [[maybe_unused]] Microsoft::UI::Xaml::Controls::NumberBoxValueChangedEventArgs const& event_args)
@@ -245,13 +290,10 @@ namespace winrt::OctoPaint::WinUI::implementation
         [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
     {
         auto lifetime = get_strong();
-        auto const snapshot = editor_state_.Snapshot();
-        auto const gamma = snapshot.Pressure().gamma;
-        PressureCurveComboBox().SelectedIndex(
-            gamma == 1.0F ? 0 : gamma == 0.5F ? 1 : gamma == 2.0F ? 2 : 3);
-        PressureGammaNumberBox().Value(gamma);
-        StabilizerStrengthNumberBox().Value(snapshot.Stabilizer().strength * 100.0F);
-        StabilizerSmoothingNumberBox().Value(snapshot.Stabilizer().smoothing * 100.0F);
+        PressureCurveComboBox().SelectedIndex(tool_options_.pressure_curve_preset);
+        PressureGammaNumberBox().Value(tool_options_.pressure_gamma);
+        StabilizerStrengthNumberBox().Value(tool_options_.stabilizer_strength);
+        StabilizerSmoothingNumberBox().Value(tool_options_.stabilizer_smoothing);
         SensitivityDialog().XamlRoot(RootGrid().XamlRoot());
         [[maybe_unused]] auto const result = co_await SensitivityDialog().ShowAsync();
     }
@@ -260,17 +302,10 @@ namespace winrt::OctoPaint::WinUI::implementation
         [[maybe_unused]] Microsoft::UI::Xaml::Controls::ContentDialog const& sender,
         [[maybe_unused]] Microsoft::UI::Xaml::Controls::ContentDialogButtonClickEventArgs const& event_args)
     {
-        auto const snapshot = editor_state_.Snapshot();
-        auto stabilizer = snapshot.Stabilizer();
-        stabilizer.strength = static_cast<float>(StabilizerStrengthNumberBox().Value() / 100.0);
-        stabilizer.smoothing = static_cast<float>(StabilizerSmoothingNumberBox().Value() / 100.0);
-        auto const gamma = PressureCurveComboBox().SelectedIndex() == 0 ? 1.0F
-            : PressureCurveComboBox().SelectedIndex() == 1 ? 0.5F
-            : PressureCurveComboBox().SelectedIndex() == 2 ? 2.0F
-            : static_cast<float>(PressureGammaNumberBox().Value());
-        editor_state_.SetPressureGamma(gamma);
-        editor_state_.SetStabilizer(stabilizer);
-        ProjectEditorStateToControls();
+        tool_options_.pressure_curve_preset = (std::max)(0, PressureCurveComboBox().SelectedIndex());
+        tool_options_.pressure_gamma = PressureGammaNumberBox().Value();
+        tool_options_.stabilizer_strength = StabilizerStrengthNumberBox().Value();
+        tool_options_.stabilizer_smoothing = StabilizerSmoothingNumberBox().Value();
     }
 
     void MainWindow::Canvas_PointerInput(
@@ -280,32 +315,17 @@ namespace winrt::OctoPaint::WinUI::implementation
         UpdatePointerDevice(event_args);
     }
 
-    void MainWindow::ProjectEditorStateToControls()
+    void MainWindow::ProjectToolOptionsToControls()
     {
-        auto const snapshot = editor_state_.Snapshot();
-        foreground_color_ = ToHsva(ToRgba(snapshot.ForegroundColor()));
-        background_color_ = ToHsva(ToRgba(snapshot.BackgroundColor()));
-        ForegroundSwatchPreview().Background(ColorBrush(foreground_color_));
-        BackgroundSwatchPreview().Background(ColorBrush(background_color_));
-
-        PencilToolButton().IsChecked(snapshot.ActiveTool() == octopaint::application::EditorTool::Pencil);
-        AirbrushToolButton().IsChecked(snapshot.ActiveTool() == octopaint::application::EditorTool::Airbrush);
-        RectangularMarqueeToolButton().IsChecked(snapshot.ActiveTool() == octopaint::application::EditorTool::RectangularMarquee);
-        EllipticalMarqueeToolButton().IsChecked(snapshot.ActiveTool() == octopaint::application::EditorTool::EllipticalMarquee);
-        FreehandLassoToolButton().IsChecked(snapshot.ActiveTool() == octopaint::application::EditorTool::FreehandLasso);
-        PolygonalLassoToolButton().IsChecked(snapshot.ActiveTool() == octopaint::application::EditorTool::PolygonalLasso);
-        MoveLayerToolButton().IsChecked(snapshot.ActiveTool() == octopaint::application::EditorTool::MoveLayer);
-
-        auto const& brush = snapshot.Brush();
         suppress_tool_option_events_ = true;
-        BrushSizeNumberBox().Value(brush.size_pixels);
-        HardnessNumberBox().Value(brush.hardness * 100.0F);
-        SpacingNumberBox().Value(brush.spacing * 100.0F);
-        FlowNumberBox().Value(brush.flow * 100.0F);
-        OpacityNumberBox().Value(brush.opacity * 100.0F);
-        PressureSizeCheckBox().IsChecked(brush.pressure_affects_size);
-        PressureOpacityCheckBox().IsChecked(brush.pressure_affects_opacity);
-        StrokeStabilizerCheckBox().IsChecked(snapshot.Stabilizer().enabled);
+        BrushSizeNumberBox().Value(tool_options_.brush_size);
+        HardnessNumberBox().Value(tool_options_.hardness);
+        SpacingNumberBox().Value(tool_options_.spacing);
+        FlowNumberBox().Value(tool_options_.flow);
+        OpacityNumberBox().Value(tool_options_.opacity);
+        PressureSizeCheckBox().IsChecked(tool_options_.pressure_affects_dab_size);
+        PressureOpacityCheckBox().IsChecked(tool_options_.pressure_affects_opacity);
+        StrokeStabilizerCheckBox().IsChecked(tool_options_.stroke_stabilizer);
         PressureSizeCheckBox().IsEnabled(stylus_detected_);
         PressureOpacityCheckBox().IsEnabled(stylus_detected_);
         suppress_tool_option_events_ = false;
@@ -324,20 +344,14 @@ namespace winrt::OctoPaint::WinUI::implementation
             return std::isnan(value) ? fallback : value;
         };
 
-        auto const snapshot = editor_state_.Snapshot();
-        auto brush = snapshot.Brush();
-        brush.size_pixels = static_cast<float>(value_or(BrushSizeNumberBox(), brush.size_pixels));
-        brush.hardness = static_cast<float>(value_or(HardnessNumberBox(), brush.hardness * 100.0F) / 100.0);
-        brush.spacing = static_cast<float>(value_or(SpacingNumberBox(), brush.spacing * 100.0F) / 100.0);
-        brush.flow = static_cast<float>(value_or(FlowNumberBox(), brush.flow * 100.0F) / 100.0);
-        brush.opacity = static_cast<float>(value_or(OpacityNumberBox(), brush.opacity * 100.0F) / 100.0);
-        brush.pressure_affects_size = IsChecked(PressureSizeCheckBox());
-        brush.pressure_affects_opacity = IsChecked(PressureOpacityCheckBox());
-        auto stabilizer = snapshot.Stabilizer();
-        stabilizer.enabled = IsChecked(StrokeStabilizerCheckBox());
-        editor_state_.SetBrush(brush);
-        editor_state_.SetStabilizer(stabilizer);
-        ProjectEditorStateToControls();
+        tool_options_.brush_size = value_or(BrushSizeNumberBox(), tool_options_.brush_size);
+        tool_options_.hardness = value_or(HardnessNumberBox(), tool_options_.hardness);
+        tool_options_.spacing = value_or(SpacingNumberBox(), tool_options_.spacing);
+        tool_options_.flow = value_or(FlowNumberBox(), tool_options_.flow);
+        tool_options_.opacity = value_or(OpacityNumberBox(), tool_options_.opacity);
+        tool_options_.pressure_affects_dab_size = IsChecked(PressureSizeCheckBox());
+        tool_options_.pressure_affects_opacity = IsChecked(PressureOpacityCheckBox());
+        tool_options_.stroke_stabilizer = IsChecked(StrokeStabilizerCheckBox());
     }
 
     void MainWindow::UpdatePointerDevice(Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
@@ -373,12 +387,11 @@ namespace winrt::OctoPaint::WinUI::implementation
     void MainWindow::RefreshView()
     {
         auto const snapshot = workspace_.Snapshot();
-        auto const editor_snapshot = editor_state_.Snapshot();
         DocumentTitleText().Text(winrt::to_hstring(snapshot.document_title));
         StatusText().Text(winrt::to_hstring(std::format(
             "{} | Tool: {}",
             snapshot.status_message,
-            ToolName(editor_snapshot.ActiveTool()))));
+            winrt::to_string(selected_tool_))));
         RefreshDocumentTabs(snapshot);
     }
 
@@ -414,36 +427,21 @@ namespace winrt::OctoPaint::WinUI::implementation
 
     void MainWindow::SelectTool(Microsoft::UI::Xaml::Controls::Primitives::ToggleButton const& selected_button)
     {
-        using octopaint::application::EditorTool;
-        if (selected_button == PencilToolButton())
+        auto const buttons = std::array{
+            PencilToolButton(),
+            AirbrushToolButton(),
+            RectangularMarqueeToolButton(),
+            EllipticalMarqueeToolButton(),
+            FreehandLassoToolButton(),
+            PolygonalLassoToolButton(),
+            MoveLayerToolButton() };
+
+        for (auto const& button : buttons)
         {
-            editor_state_.SetActiveTool(EditorTool::Pencil);
+            button.IsChecked(button == selected_button);
         }
-        else if (selected_button == AirbrushToolButton())
-        {
-            editor_state_.SetActiveTool(EditorTool::Airbrush);
-        }
-        else if (selected_button == RectangularMarqueeToolButton())
-        {
-            editor_state_.SetActiveTool(EditorTool::RectangularMarquee);
-        }
-        else if (selected_button == EllipticalMarqueeToolButton())
-        {
-            editor_state_.SetActiveTool(EditorTool::EllipticalMarquee);
-        }
-        else if (selected_button == FreehandLassoToolButton())
-        {
-            editor_state_.SetActiveTool(EditorTool::FreehandLasso);
-        }
-        else if (selected_button == PolygonalLassoToolButton())
-        {
-            editor_state_.SetActiveTool(EditorTool::PolygonalLasso);
-        }
-        else if (selected_button == MoveLayerToolButton())
-        {
-            editor_state_.SetActiveTool(EditorTool::MoveLayer);
-        }
-        ProjectEditorStateToControls();
+
+        selected_tool_ = unbox_value<hstring>(selected_button.Tag());
     }
 
     void MainWindow::BeginColorEdit(
@@ -526,22 +524,9 @@ namespace winrt::OctoPaint::WinUI::implementation
         {
             RestoreEditingColor();
         }
-        else
-        {
-            auto const color = ToEditorColor(ToRgba(EditingTarget()));
-            if (editing_foreground_)
-            {
-                editor_state_.SetForegroundColor(color);
-            }
-            else
-            {
-                editor_state_.SetBackgroundColor(color);
-            }
-        }
 
         color_edit_active_ = false;
         ColorEditorFlyout().Hide();
-        ProjectEditorStateToControls();
     }
 
     void MainWindow::CloseColorEditorBeforeExternalChange()
@@ -656,16 +641,6 @@ namespace winrt::OctoPaint::WinUI::implementation
             color.alpha / 255.0 };
     }
 
-    MainWindow::RgbaColor MainWindow::ToRgba(octopaint::application::EditorColor const color) noexcept
-    {
-        return { color.red, color.green, color.blue, color.alpha };
-    }
-
-    octopaint::application::EditorColor MainWindow::ToEditorColor(RgbaColor const color) noexcept
-    {
-        return { color.red, color.green, color.blue, color.alpha };
-    }
-
     Microsoft::UI::Xaml::Media::SolidColorBrush MainWindow::ColorBrush(HsvaColor const& color)
     {
         auto const rgba = ToRgba(color);
@@ -673,4 +648,3 @@ namespace winrt::OctoPaint::WinUI::implementation
             Windows::UI::Color{ rgba.alpha, rgba.red, rgba.green, rgba.blue });
     }
 }
-
