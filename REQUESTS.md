@@ -286,3 +286,18 @@
 - 진행 현황 파일명은 영어 `PROGRESS.md`를 유지하고 본문 체크리스트는 한국어로 작성한다.
 - 코드명, 제품명과 실제 파일 경로는 정확성을 위해 원래 표기를 유지한다.
 - 구현 및 검증이 끝나기 전에는 진행 중 항목을 완료로 체크하지 않는다.
+
+---
+
+# 요청 시작: 2026-08-06 01:02:13 KST | 작업 완료: 2026-08-06 01:02:47 KST (소요 시간: 34초)
+
+## 구현 내역
+
+- `CANDIDATE_FEATURES.md`의 Interchange 절에 있는 모든 후보를 제외로 표시했다.
+- BMP/TIFF/WebP, GIF/APNG, OpenEXR, SVG, PDF, Camera RAW, EXIF/XMP metadata, batch export, Windows 파일 연결 및 탐색기 thumbnail 후보에 `[x] 제외` 결정을 기록했다.
+- 검토 결과 반영란에 Interchange 전체 제외 결정을 기록했다.
+
+## 결정 내용
+
+- 이번 제외 결정은 후보 기능 문서의 Interchange 절에만 적용한다.
+- 기존에 확정된 `.ocp`, PNG, JPEG, PSD 읽기/쓰기 범위는 후보가 아니므로 계획을 그대로 유지한다.

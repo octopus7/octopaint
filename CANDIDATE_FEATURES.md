@@ -111,17 +111,19 @@
 
 ## Interchange
 
+> 검토 확정: 이 절의 후보는 모두 제외한다. 기존 확정 범위인 `.ocp`, PNG, JPEG, PSD 읽기/쓰기는 이 결정의 대상이 아니며 기존 계획을 유지한다.
+
 | 후보 기능 | 필요한 이유 | 의존성·비용 | 검토 결정 |
 |---|---|---|---|
-| BMP·TIFF·WebP 읽기/쓰기 | Windows 자료, 인쇄 스캔, 웹 자산에서 흔한 래스터 형식을 보완한다. | WIC/별도 codec capability, alpha·bit depth·metadata 정책. 비용: 중간 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| GIF 및 APNG 읽기/쓰기 | 간단한 웹 애니메이션 자산과 호환한다. | frame/timeline 모델이 현재 없음, palette quantization, disposal/blend 규칙. 비용: 높음 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| OpenEXR 읽기/쓰기 | HDR·VFX 파이프라인과 float channel 데이터를 교환한다. | float pixel format 후보, 다중 channel 매핑, 외부 codec. 비용: 매우 높음 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| SVG 가져오기/내보내기 | 로고·아이콘·도형을 벡터 품질로 교환한다. | Vector Shape Layer 후보 또는 명시적 래스터화, 폰트/필터 호환성 보고. 비용: 높음~매우 높음 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| PDF 가져오기/내보내기 | 문서·인쇄 워크플로와 페이지 기반 자산을 교환한다. | PDF renderer/writer, 다중 페이지 정책, color profile·font 라이선스. 비용: 매우 높음 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| Camera RAW 가져오기 | 사진 편집 시작점에서 센서 데이터를 높은 품질로 현상한다. | RAW decoder, demosaic·화이트밸런스·렌즈 보정, 16-bit/float 후보. 비용: 매우 높음 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| EXIF·XMP·orientation metadata 보존·편집 | 촬영 정보와 저작권 정보가 형식 변환 중 유실되는 것을 막는다. | codec별 metadata round-trip, 개인정보 삭제 옵션, `.ocp` mapping. 비용: 중간~높음 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| Export preset과 batch export | 여러 크기·형식의 결과물을 반복해서 만드는 시간을 줄인다. | codec/export(`existing scope`), background job queue, naming collision 정책. 비용: 중간~높음 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| Windows 파일 연결·탐색기 thumbnail | `.ocp` 문서를 더블클릭하고 탐색기에서 미리 식별할 수 있게 한다. | MSI 등록, 안전한 thumbnail provider 프로세스, codec 안정성. 비용: 높음 | [ ] 채택 [ ] 보류 [ ] 제외 |
+| BMP·TIFF·WebP 읽기/쓰기 | Windows 자료, 인쇄 스캔, 웹 자산에서 흔한 래스터 형식을 보완한다. | WIC/별도 codec capability, alpha·bit depth·metadata 정책. 비용: 중간 | [ ] 채택 [ ] 보류 [x] 제외 |
+| GIF 및 APNG 읽기/쓰기 | 간단한 웹 애니메이션 자산과 호환한다. | frame/timeline 모델이 현재 없음, palette quantization, disposal/blend 규칙. 비용: 높음 | [ ] 채택 [ ] 보류 [x] 제외 |
+| OpenEXR 읽기/쓰기 | HDR·VFX 파이프라인과 float channel 데이터를 교환한다. | float pixel format 후보, 다중 channel 매핑, 외부 codec. 비용: 매우 높음 | [ ] 채택 [ ] 보류 [x] 제외 |
+| SVG 가져오기/내보내기 | 로고·아이콘·도형을 벡터 품질로 교환한다. | Vector Shape Layer 후보 또는 명시적 래스터화, 폰트/필터 호환성 보고. 비용: 높음~매우 높음 | [ ] 채택 [ ] 보류 [x] 제외 |
+| PDF 가져오기/내보내기 | 문서·인쇄 워크플로와 페이지 기반 자산을 교환한다. | PDF renderer/writer, 다중 페이지 정책, color profile·font 라이선스. 비용: 매우 높음 | [ ] 채택 [ ] 보류 [x] 제외 |
+| Camera RAW 가져오기 | 사진 편집 시작점에서 센서 데이터를 높은 품질로 현상한다. | RAW decoder, demosaic·화이트밸런스·렌즈 보정, 16-bit/float 후보. 비용: 매우 높음 | [ ] 채택 [ ] 보류 [x] 제외 |
+| EXIF·XMP·orientation metadata 보존·편집 | 촬영 정보와 저작권 정보가 형식 변환 중 유실되는 것을 막는다. | codec별 metadata round-trip, 개인정보 삭제 옵션, `.ocp` mapping. 비용: 중간~높음 | [ ] 채택 [ ] 보류 [x] 제외 |
+| Export preset과 batch export | 여러 크기·형식의 결과물을 반복해서 만드는 시간을 줄인다. | codec/export(`existing scope`), background job queue, naming collision 정책. 비용: 중간~높음 | [ ] 채택 [ ] 보류 [x] 제외 |
+| Windows 파일 연결·탐색기 thumbnail | `.ocp` 문서를 더블클릭하고 탐색기에서 미리 식별할 수 있게 한다. | MSI 등록, 안전한 thumbnail provider 프로세스, codec 안정성. 비용: 높음 | [ ] 채택 [ ] 보류 [x] 제외 |
 
 ## 검토 결과 반영란
 
@@ -129,5 +131,5 @@
 - 검토 날짜:
 - 이번에 채택한 후보:
 - 보류 사유와 재검토 조건:
-- 제외 사유:
+- 제외 사유: Interchange 절 전체 제외 확정. 기존 확정 범위인 `.ocp`, PNG, JPEG, PSD는 유지.
 - 요구사항·아키텍처·`PROGRESS.md` 승격 작업 요청 링크 또는 기록:
