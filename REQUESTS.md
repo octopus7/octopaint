@@ -383,3 +383,24 @@
 - 채택한 기능은 설계 범위로 확정하지만 이번 문서 작업에서 구현하지 않는다.
 - 복수 레이어 변경과 병합은 부분 적용 없이 하나의 원자적 Undo 명령으로 처리한다.
 - Linked/Smart Object의 외부 원본이 누락돼도 마지막 정상 Cache를 유지하고 명시적 진단을 제공한다.
+
+---
+
+# 요청 시작: 2026-08-06 01:10:43 KST | 작업 완료: 2026-08-06 01:16:00 KST (소요 시간: 0시간 5분 17초)
+
+## 구현 내역
+
+- `CANDIDATE_FEATURES.md`의 Essential workflow 후보 7개를 모두 채택 상태로 변경했다.
+- Painting 후보 가운데 일반 Paint Brush, Eraser, Eyedropper, Paint Bucket, Gradient, Brush Preset, 대칭·미러 페인팅, Clone Stamp 및 Healing을 채택했다.
+- `Line 및 기본 Shape 도구`는 보류 상태로 기록하고 제품 요구사항의 도구 ID, 명령 및 도메인 타입에는 포함하지 않았다.
+- 채택 기능의 동작과 완료 기준을 제품 요구사항에 추가했다.
+- 명령 레지스트리, 설정 포트, 클립보드, 복제, 이력 스냅샷 및 페인팅 도메인의 UI 중립 경계를 편집기 아키텍처에 설계했다.
+- 채택한 기능을 `PROGRESS.md`에 미착수 체크 항목으로 추가했다.
+
+## 결정 내용
+
+- Essential workflow의 모든 후보는 구현 대상 설계 범위로 확정한다.
+- Painting은 Line 및 기본 Shape만 보류하며 나머지 후보는 구현 대상 설계 범위로 확정한다.
+- 보류 기능은 래스터화, stroke/fill 및 안티앨리어싱 정책을 별도로 확정할 때 재검토한다.
+- 이번 작업은 설계 승격만 수행하며 새로 채택한 기능의 구현 완료를 의미하지 않는다.
+- 기존 Layers 채택, Vector Shape Layer 제외 및 Interchange 전체 제외 결정은 그대로 유지한다.

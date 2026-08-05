@@ -20,27 +20,27 @@
 
 | 후보 기능 | 필요한 이유 | 의존성·비용 | 검토 결정 |
 |---|---|---|---|
-| 잘라내기·복사·붙여넣기와 클립보드 이미지 교환 | 다른 앱 및 문서 사이에서 픽셀과 선택 내용을 이동하는 가장 기본적인 편집 흐름이다. | 선택 영역과 레이어 명령(`existing scope`), Windows 클립보드 어댑터, 대용량 데이터 지연 복사. 비용: 중간 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| 문서·레이어 복제 명령 | 반복 작업과 변형 전 안전한 사본 생성을 빠르게 한다. | 안정 ID 재발급, Copy-on-Write 타일, 명령/Undo(`existing scope`). 비용: 낮음~중간 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| 사용자 지정 단축키와 충돌 검사 | 전문 편집 작업의 속도를 높이고 다른 도구에서 전환하는 사용자의 키맵을 수용한다. | frontend-neutral command ID, 설정 저장, 키보드 레이아웃별 충돌 UI. 비용: 중간 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| 명령 검색 또는 Command Palette | 메뉴 위치를 몰라도 기능을 찾아 실행할 수 있고 키보드 중심 사용성을 높인다. | 명령 레지스트리, 활성 조건, 지역화된 검색어. 비용: 중간 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| 환경설정 저장과 초기화 | 단축키, 도구 기본값, 성능·색관리 설정을 세션 간 유지한다. | 버전이 있는 사용자 설정 스키마, 손상 시 기본값 복구, frontend-neutral 설정 경계. 비용: 중간 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| 파일 및 이미지 Drag & Drop | 탐색기에서 열기·가져오기를 자연스럽게 수행한다. | 파일 열기/가져오기 포트(`existing scope`), WinUI 드롭 어댑터, 복수 파일 정책. 비용: 낮음~중간 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| Undo History 패널과 특정 시점 이동 | 여러 단계를 한눈에 확인하고 원하는 revision으로 빠르게 돌아가게 한다. | 문서별 history(`existing scope`)의 안전한 읽기 스냅샷, 분기 이력 정책. 비용: 중간 | [ ] 채택 [ ] 보류 [ ] 제외 |
+| 잘라내기·복사·붙여넣기와 클립보드 이미지 교환 | 다른 앱 및 문서 사이에서 픽셀과 선택 내용을 이동하는 가장 기본적인 편집 흐름이다. | 선택 영역과 레이어 명령(`existing scope`), Windows 클립보드 어댑터, 대용량 데이터 지연 복사. 비용: 중간 | [x] 채택 [ ] 보류 [ ] 제외 |
+| 문서·레이어 복제 명령 | 반복 작업과 변형 전 안전한 사본 생성을 빠르게 한다. | 안정 ID 재발급, Copy-on-Write 타일, 명령/Undo(`existing scope`). 비용: 낮음~중간 | [x] 채택 [ ] 보류 [ ] 제외 |
+| 사용자 지정 단축키와 충돌 검사 | 전문 편집 작업의 속도를 높이고 다른 도구에서 전환하는 사용자의 키맵을 수용한다. | frontend-neutral command ID, 설정 저장, 키보드 레이아웃별 충돌 UI. 비용: 중간 | [x] 채택 [ ] 보류 [ ] 제외 |
+| 명령 검색 또는 Command Palette | 메뉴 위치를 몰라도 기능을 찾아 실행할 수 있고 키보드 중심 사용성을 높인다. | 명령 레지스트리, 활성 조건, 지역화된 검색어. 비용: 중간 | [x] 채택 [ ] 보류 [ ] 제외 |
+| 환경설정 저장과 초기화 | 단축키, 도구 기본값, 성능·색관리 설정을 세션 간 유지한다. | 버전이 있는 사용자 설정 스키마, 손상 시 기본값 복구, frontend-neutral 설정 경계. 비용: 중간 | [x] 채택 [ ] 보류 [ ] 제외 |
+| 파일 및 이미지 Drag & Drop | 탐색기에서 열기·가져오기를 자연스럽게 수행한다. | 파일 열기/가져오기 포트(`existing scope`), WinUI 드롭 어댑터, 복수 파일 정책. 비용: 낮음~중간 | [x] 채택 [ ] 보류 [ ] 제외 |
+| Undo History 패널과 특정 시점 이동 | 여러 단계를 한눈에 확인하고 원하는 revision으로 빠르게 돌아가게 한다. | 문서별 history(`existing scope`)의 안전한 읽기 스냅샷, 분기 이력 정책. 비용: 중간 | [x] 채택 [ ] 보류 [ ] 제외 |
 
 ## Painting
 
 | 후보 기능 | 필요한 이유 | 의존성·비용 | 검토 결정 |
 |---|---|---|---|
-| 일반 Paint Brush와 soft/hard tip | Pencil과 Airbrush 사이의 표준 불투명도 기반 회화 도구가 현재 확정 범위에 없다. | 공통 dab 엔진, 압력·간격·경도, preview/gesture transaction(`existing scope`). 비용: 중간~높음 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| Eraser 도구 | 투명 픽셀 제거와 마스크 편집의 기본 수단이다. | Brush 엔진, alpha lock(`existing scope`)과 선택/마스크 결합 규칙. 비용: 중간 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| Eyedropper와 합성/활성 레이어 샘플링 | 캔버스에서 직접 색을 얻는 핵심 색 선택 흐름이다. | 렌더 스냅샷 또는 CPU 합성 샘플 포트, foreground color 상태(`existing scope`). 비용: 중간 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| Paint Bucket과 유사색 허용치 | 닫힌 영역이나 유사색 영역을 빠르게 채운다. | 연결 영역 탐색, 타일 경계 처리, selection/mask/alpha lock(`existing scope`). 비용: 중간~높음 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| Gradient 도구 | 단색 채우기만으로 만들기 어려운 부드러운 명암과 마스크를 생성한다. | 선형·방사형 gradient 파라미터, 색 보간 정책, preview transaction. 비용: 중간 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| Line 및 기본 Shape 도구 | 직선, 사각형, 타원 같은 반복적인 도형 작성을 지원한다. | 래스터화 규칙, stroke/fill 설정, antialias 정책, preview overlay. 비용: 중간 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| Brush Preset 관리·가져오기·내보내기 | 자주 쓰는 브러시 설정을 재사용하고 공유할 수 있게 한다. | 버전 있는 preset 스키마, tip 자산 저장, 설정 마이그레이션. 비용: 중간 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| 대칭·미러 페인팅 | 캐릭터·패턴 작업에서 반복 스트로크를 줄인다. | 하나의 입력을 복수 문서 좌표로 변환하는 gesture fan-out, 단일 Undo 보장. 비용: 중간 | [ ] 채택 [ ] 보류 [ ] 제외 |
-| Clone Stamp와 Healing | 사진 보정 및 텍스처 복원에 필요한 대표 도구다. | source anchor 상태, 주변 타일 샘플링, healing 알고리즘, 대형 문서 성능. 비용: 높음 | [ ] 채택 [ ] 보류 [ ] 제외 |
+| 일반 Paint Brush와 soft/hard tip | Pencil과 Airbrush 사이의 표준 불투명도 기반 회화 도구가 현재 확정 범위에 없다. | 공통 dab 엔진, 압력·간격·경도, preview/gesture transaction(`existing scope`). 비용: 중간~높음 | [x] 채택 [ ] 보류 [ ] 제외 |
+| Eraser 도구 | 투명 픽셀 제거와 마스크 편집의 기본 수단이다. | Brush 엔진, alpha lock(`existing scope`)과 선택/마스크 결합 규칙. 비용: 중간 | [x] 채택 [ ] 보류 [ ] 제외 |
+| Eyedropper와 합성/활성 레이어 샘플링 | 캔버스에서 직접 색을 얻는 핵심 색 선택 흐름이다. | 렌더 스냅샷 또는 CPU 합성 샘플 포트, foreground color 상태(`existing scope`). 비용: 중간 | [x] 채택 [ ] 보류 [ ] 제외 |
+| Paint Bucket과 유사색 허용치 | 닫힌 영역이나 유사색 영역을 빠르게 채운다. | 연결 영역 탐색, 타일 경계 처리, selection/mask/alpha lock(`existing scope`). 비용: 중간~높음 | [x] 채택 [ ] 보류 [ ] 제외 |
+| Gradient 도구 | 단색 채우기만으로 만들기 어려운 부드러운 명암과 마스크를 생성한다. | 선형·방사형 gradient 파라미터, 색 보간 정책, preview transaction. 비용: 중간 | [x] 채택 [ ] 보류 [ ] 제외 |
+| Line 및 기본 Shape 도구 | 직선, 사각형, 타원 같은 반복적인 도형 작성을 지원한다. | 래스터화 규칙, stroke/fill 설정, antialias 정책, preview overlay. 비용: 중간 | [ ] 채택 [x] 보류 [ ] 제외 |
+| Brush Preset 관리·가져오기·내보내기 | 자주 쓰는 브러시 설정을 재사용하고 공유할 수 있게 한다. | 버전 있는 preset 스키마, tip 자산 저장, 설정 마이그레이션. 비용: 중간 | [x] 채택 [ ] 보류 [ ] 제외 |
+| 대칭·미러 페인팅 | 캐릭터·패턴 작업에서 반복 스트로크를 줄인다. | 하나의 입력을 복수 문서 좌표로 변환하는 gesture fan-out, 단일 Undo 보장. 비용: 중간 | [x] 채택 [ ] 보류 [ ] 제외 |
+| Clone Stamp와 Healing | 사진 보정 및 텍스처 복원에 필요한 대표 도구다. | source anchor 상태, 주변 타일 샘플링, healing 알고리즘, 대형 문서 성능. 비용: 높음 | [x] 채택 [ ] 보류 [ ] 제외 |
 
 ## Selection / transform
 
@@ -129,7 +129,7 @@
 
 - 검토자: 사용자
 - 검토 날짜: 2026-08-06
-- 이번에 채택한 후보: Layers 절의 Merge Down·Merge Visible·Flatten, 복수 레이어 선택과 일괄 속성 변경, Text Layer와 텍스트 편집, Fill Layer, Layer Effects, Layer 색상 태그·검색·필터, Linked 또는 Smart Object 계열 레이어.
-- 보류 사유와 재검토 조건: 없음.
+- 이번에 채택한 후보: 기존 Layers 절 채택 7개를 유지하고, Essential workflow 절 7개 전부와 Painting 절의 일반 Paint Brush, Eraser, Eyedropper, Paint Bucket, Gradient, Brush Preset, 대칭·미러 페인팅, Clone Stamp·Healing을 추가 채택한다.
+- 보류 사유와 재검토 조건: Line 및 기본 Shape 도구는 이번 범위에서 보류한다. 래스터화·stroke/fill·안티앨리어싱 정책을 별도로 확정할 때 재검토하며, 현재 제품 요구사항·명령·구현 타입에는 승격하지 않는다.
 - 제외 사유: Vector Shape Layer는 제품 범위에서 제외한다. Interchange 절 전체 제외 결정도 유지한다. 기존 확정 범위인 `.ocp`, PNG, JPEG, PSD는 유지한다.
 - 요구사항·아키텍처·`PROGRESS.md` 승격 작업 요청 링크 또는 기록: 2026-08-06 사용자 확정에 따라 `docs/PRODUCT_REQUIREMENTS.md`, `docs/EDITOR_ARCHITECTURE.md`, `PROGRESS.md`에 반영.

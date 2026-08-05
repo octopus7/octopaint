@@ -569,3 +569,152 @@ struct EditorColors {
 - 도구는 플랫폼 중립 pointer sample을 받는 Application 상태 기계이며 WinUI 툴바는 이를 투영만 한다.
 - Crop, Canvas Resize, Resample은 데이터 의미가 다르므로 별도 명령으로 유지한다.
 - `.ocp`가 무손실 기준 포맷이고 PNG/JPEG는 평면 내보내기, PSD는 호환성 보고가 있는 변환 포맷이다.
+
+## 18. 채택된 핵심 워크플로와 페인팅 확장 경계
+
+이 절의 기능은 후보 검토에서 채택되었지만 특정 프런트엔드에 귀속되지 않는다. WinUI는 키 입력, 드롭, 운영체제 클립보드와 패널을 어댑터로 투영할 뿐이며 명령 검색, 설정 의미, 이력 이동, 페인트 계산을 소유하지 않는다.
+
+### 명령 레지스트리, 설정 및 런타임 세션
+
+```cpp
+struct CommandDescriptor {
+    CommandId id;                    // 안정된 문자열 ID
+    LocalizationKey label;
+    std::vector<LocalizationKey> searchTerms;
+    ParameterSchema parameters;
+    ShortcutBinding defaultShortcut;
+};
+
+class ICommandRegistry {
+public:
+    virtual std::span<const CommandDescriptor> descriptors() const = 0;
+    virtual CommandAvailability availability(CommandId, const WorkspaceSnapshot&) const = 0;
+    virtual CommandResult invoke(CommandId, const ParameterBag&, CommandContext&) = 0;
+};
+
+class IUserSettingsPort {
+public:
+    virtual SettingsReadResult read() = 0;
+    virtual SettingsWriteResult write(const VersionedUserSettings&) = 0;
+    virtual SettingsWriteResult backupCorruptAndReset() = 0;
+};
+
+struct EditorSessionSnapshot {
+    uint64_t sequence;
+    std::optional<DocumentId> activeDocument;
+    StableToolId activeTool;
+    EditorColors colors;
+    ToolSettingsSnapshot toolSettings;
+    CommandContextSnapshot commandContext;
+};
+```
+
+- 메뉴, 사용자 단축키와 Command Palette는 모두 `ICommandRegistry`의 같은 ID, 활성 조건과 실행 경로를 사용한다. Palette 검색용 지역화 문자열은 표시/검색에만 사용하고 저장이나 실행 identity로 사용하지 않는다.
+- 단축키는 command ID와 입력 scope의 매핑으로 저장한다. 새 매핑은 동일 scope의 exact/prefix 충돌을 먼저 계산하고 사용자가 해결하기 전에는 활성 설정을 바꾸지 않는다.
+- 사용자 설정은 schema version을 가진 값 객체다. Application은 마이그레이션과 기본값을 정의하고, 파일 위치·원자 저장은 설정 포트가 담당한다. 손상 파일은 백업한 뒤 안전한 기본값으로 시작하고 진단을 게시한다.
+- `EditorSessionSnapshot`은 현재 실행 중인 UI 중립 편집 상태를 투영한다. 프런트엔드는 이 값을 표시하고 입력 의도를 명령으로 돌려보낸다. 정상 종료 후 workspace 복원은 별도 Reliability 후보이므로 이 계약만으로 영구 세션 복원을 암시하지 않는다.
+- 파일/이미지 Drag & Drop은 어댑터가 경로·스트림·제안 동작을 `ExternalItemRequest` 값으로 바꾼 뒤 기존 열기/가져오기 포트로 전달한다. Core에는 drag event, storage item 또는 HWND가 들어오지 않는다.
+
+### 클립보드, 복제 및 이력 경계
+
+```cpp
+struct ClipboardPayload {
+    ClipboardPayloadId id;
+    RectI sourceBounds;
+    PixelFormat format;
+    ColorProfileDescriptor color;
+    SharedTileSnapshot pixels;
+    std::optional<SelectionSnapshot> selection;
+    uint64_t estimatedBytes;
+};
+
+class IClipboardPort {
+public:
+    virtual ClipboardWriteResult write(const ClipboardPayload&, ClipboardWriteMode) = 0;
+    virtual ClipboardReadResult read(const ClipboardFormatPreference&) = 0;
+};
+
+struct HistorySnapshot {
+    DocumentId document;
+    std::vector<HistoryEntrySummary> entries;
+    HistoryEntryId current;
+    std::optional<HistoryEntryId> saved;
+};
+```
+
+- Copy는 선택된 픽셀과 색 정보를 불변 타일 스냅샷으로 캡처하는 읽기 작업이다. Cut은 같은 payload를 만든 뒤 선택 제약을 적용한 삭제 명령 하나를 실행한다. Paste는 내부 payload나 외부 평면 이미지를 새 편집 대상으로 가져오는 명령이며 부분 타일을 공개하지 않는다.
+- 운영체제별 delayed rendering과 image format 변환은 `IClipboardPort` 어댑터 책임이다. 대용량 payload는 시작 document revision을 유지하고 만료·source loss를 명시적으로 보고한다.
+- Duplicate Document/Layer는 모든 복제 노드에 새 ID를 할당하되 불변 tile payload는 COW로 공유한다. 중첩 순서, 속성, 마스크와 지원되는 메타데이터를 보존하고 선택/활성 anchor 정책은 명령 매개변수로 명시한다.
+- 이력 패널은 `HistorySnapshot`만 읽는다. 특정 시점 이동은 안정된 `HistoryEntryId`를 받는 원자 명령이며 실패 시 현재 revision을 유지한다. 과거로 이동한 뒤 새 명령을 실행하면 기존 redo branch를 교체한다. 별도 분기 그래프는 이번 계약에 포함하지 않는다.
+- 문서별 이력, 클립보드 캡처와 복제는 서로 다른 문서의 상태를 혼합하지 않는다. workspace 런타임 세션은 명령 완료 후 새 sequence의 스냅샷만 게시한다.
+
+### 채택된 페인팅 도메인
+
+채택된 도구는 안정된 tool ID로 등록하며 Paint Brush, Eraser, Eyedropper, Paint Bucket, Gradient, Brush Preset, Symmetry/Mirror, Clone Stamp와 Healing을 포함한다. 각 gesture는 플랫폼 중립 pointer/stylus sample과 아래 값 계약을 사용한다.
+
+```cpp
+struct PaintBrushSettings {
+    float radius;
+    float hardness;
+    float spacingDiameterRatio;
+    float flow;
+    float opacity;
+    PressureMapping pressure;
+    StrokeStabilizerSettings stabilizer;
+    BrushTipReference tip;
+};
+
+struct FloodFillSpec {
+    PointI seed;
+    ColorValue replacement;
+    float tolerance;
+    ColorDistancePolicy distance;
+    EditTarget target;
+};
+
+struct GradientSpec {
+    GradientKind kind;               // Linear or Radial
+    PointF start;
+    PointF end;
+    std::vector<GradientStop> stops;
+    ColorInterpolationPolicy interpolation;
+    EditTarget target;
+};
+
+struct SampleColorRequest {
+    PointI point;
+    SampleSource source;             // ActiveLayer or VisibleComposite
+    SampleFootprint footprint;
+    ColorDestination destination;    // Foreground or Background
+    uint64_t expectedRevision;
+};
+
+struct SymmetrySpec {
+    std::vector<DocumentSpaceReflection> reflections;
+};
+
+struct CloneSource {
+    DocumentId document;
+    LayerId layer;
+    PointI anchor;
+    uint64_t revision;
+};
+```
+
+- Paint Brush는 이미 확정된 dab, hardness falloff, 거리 spacing, flow/opacity, pressure sensitivity와 Stroke Stabilizer 코어를 재사용한다. tip과 preset은 versioned data이며 코드를 실행하지 않는다.
+- Eraser는 같은 dab geometry를 사용하되 색 레이어에서는 alpha를, 마스크·선택·사용자 채널에서는 coverage를 감소시킨다. alpha-locked 색 레이어에서는 기존 alpha와 완전 투명 픽셀을 바꾸지 않으며 도구 availability 또는 진단으로 제한을 드러낸다.
+- Eyedropper는 요청한 immutable revision에서 활성 레이어 또는 visible composite의 색을 샘플링한다. 합성 샘플은 렌더러 전용 GPU readback에 의존하지 않고 동일한 CPU reference compositor 경로를 제공하며 문서 Undo 항목을 만들지 않는다.
+- Paint Bucket은 seed에서 시작하는 연결 영역 탐색으로 정의한다. tile frontier를 스트리밍하고 방문 budget·취소 토큰을 사용하며 tolerance는 versioned color-distance policy로 평가한다.
+- Gradient는 Linear와 Radial을 지원한다. preview와 commit은 동일한 stop 정렬, premultiplied alpha 및 색 공간 보간 정책을 사용한다.
+- Brush Preset은 브러시 설정, pressure/stabilizer 설정과 안전한 tip asset만 저장한다. 가져오기/내보내기는 크기 한도, digest, schema version과 required feature를 검증하고 현재 설정을 부분 변경하지 않는다.
+- Symmetry/Mirror는 하나의 안정화된 입력 stream을 문서 좌표에서 fan-out한다. 원본과 반사 stroke 전체가 한 preview transaction과 한 Undo 항목을 공유한다.
+- Clone Stamp는 고정된 `CloneSource` revision을 읽어 source/destination overlap에 영향받지 않는다. Healing은 같은 sample 계약과 halo tile을 사용하며 색/명도 적응 알고리즘에 결정적 CPU reference 구현을 둔다.
+
+### 타일, 선택, Undo 및 렌더 공통 계약
+
+- 모든 변경 도구는 active selection coverage, edit target, layer mask, visibility/lock 정책과 alpha lock을 적용한 뒤 dirty tile만 게시한다. selection 밖이나 잠긴 대상의 payload는 공유 상태를 유지한다.
+- Paint Brush, Eraser, Bucket, Gradient, Symmetry, Clone과 Healing은 gesture/operation 하나당 하나의 `IEditorCommand`와 Undo record를 생성한다. 취소·검증 실패·resource limit 초과 시 결과 타일을 하나도 게시하지 않는다.
+- preview overlay는 시작 revision과 설정 digest를 포함한다. commit은 같은 rasterizer/operator를 사용하고 revision 불일치 시 재검증 또는 취소하므로 preview와 최종 픽셀이 조용히 달라지지 않는다.
+- 렌더러는 게시된 immutable tile revision과 dirty ranges만 소비한다. Eyedropper composite, Bucket tolerance와 Healing 기준 결과에는 CPU reference 경로가 있고 GPU 가속은 같은 golden vector 허용 오차를 만족해야 한다.
+- Brush Preset과 사용자 설정은 `.ocp` 문서 데이터와 분리한다. 문서 결과에 필요한 Gradient, Clone/Healing commit 결과는 타일로 저장하고, Undo 재생에 필요한 versioned 매개변수와 source revision은 이력 record가 보존한다.
+- Line 및 기본 Shape 도구는 보류 상태이며 이 절의 tool ID, 명령 집합 또는 도메인 타입에 포함되지 않는다.

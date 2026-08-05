@@ -115,9 +115,49 @@ Adjustments operate through a frontend-neutral parameter schema so another UI ca
 
 - Pencil: hard-edged, non-antialiased drawing aligned to integer document pixels. A drag must produce a connected pixel path without subpixel coverage.
 - Airbrush: pressure- and time-based paint accumulation with radius, hardness, flow, opacity, spacing, and spray-rate parameters.
+- Paint Brush: the standard opacity-based painting tool uses the shared dab engine, supports soft and hard tips, and honors brush size, hardness, spacing, flow, overall opacity, pressure mapping, and stroke stabilization.
+- Eraser: color-layer erasing reduces alpha, while mask/channel erasing reduces grayscale coverage according to the active edit target. Alpha-locked color layers do not permit alpha erasure.
+- Eyedropper: samples either the active layer or the visible composite from an immutable document revision and updates foreground or background color without creating document history.
+- Paint Bucket: performs deterministic connected-region filling with an explicit color-distance tolerance across sparse tile boundaries.
+- Gradient: creates linear and radial raster gradients from explicit endpoints, stops, interpolation policy, and edit target through a preview transaction.
+- Brush presets: save, load, import, and export versioned brush settings and safe tip assets without executable code. Unknown optional fields are preserved where safe and unsupported required features are diagnosed.
+- Symmetry and mirror painting transform one input gesture through configured document-space axes and commit all generated dabs as one atomic history entry.
+- Clone Stamp stores an explicit source anchor and offset. Healing uses the same source contract but adjusts sampled detail to the destination neighborhood through a deterministic CPU reference algorithm.
 - Selection tools: rectangular marquee, elliptical marquee, freehand lasso, and polygonal lasso. Each supports replace, add, subtract, and intersect modes.
 - Move layer: translates the active layer or selected layer set without flattening it. Preview movement and final commit form one undoable transaction.
 - Tools consume platform-neutral pointer samples and produce preview overlays plus editor commands. They do not mutate WinUI controls or document objects directly.
+- Every painting operation is constrained by the active selection, edit target, layer mask, lock state, and alpha-lock policy before modified tiles are published. Preview and commit use the same reference rasterization contract.
+
+Painting acceptance criteria:
+
+- Paint Brush golden tests cover hard and soft tips, fast input without spacing gaps, event-chunk-independent spacing, flow/opacity composition, pressure toggle combinations, stroke stabilization, tile boundaries, and one-step undo.
+- Eraser tests prove that unlocked color pixels lose alpha, mask/channel coverage is reduced on the selected target, alpha-locked pixels preserve their original alpha, and fully transparent locked pixels remain unchanged.
+- Eyedropper tests distinguish active-layer and visible-composite sampling, apply the document color policy, update the requested color swatch, and create no document revision or history entry.
+- Paint Bucket tests cross tile boundaries without seams, obey tolerance and selection/mask bounds, terminate under configured resource limits, and leave no partial mutation after cancellation or failure.
+- Gradient preview and commit produce the same linear or radial result for identical versioned parameters; cancellation publishes no document change and commit creates exactly one undo record.
+- Brush presets round-trip their versioned settings and safe tip data; malformed, oversized, or unsupported required data is rejected without changing current settings.
+- Symmetry/mirror output equals the reference coordinate transforms and one undo removes every generated stroke branch together.
+- Clone and Healing read from a fixed source revision so overlapping source/destination edits are deterministic; missing anchors and unavailable source data fail before mutation.
+
+## Essential workflow
+
+- Cut, copy, and paste operate through a frontend-neutral clipboard payload. Internal payloads can retain editable pixels, selection bounds, and color metadata; external image exchange is flattened through a platform clipboard adapter without exposing operating-system handles to Core or Application.
+- Cut and paste are atomic undoable commands. Copy is read-only. Large clipboard payloads may be materialized lazily from an immutable source revision and must report expiration or source loss explicitly.
+- Duplicate Document and Duplicate Layer allocate fresh stable IDs while sharing immutable tile payloads through Copy-on-Write until either copy is edited.
+- A frontend-neutral command registry provides stable command IDs, localized labels/search terms, availability, parameter metadata, and default shortcuts. Menus, custom shortcuts, and Command Palette all invoke this same registry.
+- Custom shortcut settings detect exact and contextual conflicts before activation. Conflict resolution never silently removes an existing binding.
+- User preferences use a versioned schema and a settings port independent of WinUI. Reset restores documented defaults; migration or corruption failure retains a recoverable backup and starts from safe defaults with a diagnostic.
+- File and image Drag & Drop is translated by the frontend into platform-neutral open/import requests. Multiple items preserve input order, and one invalid item does not partially mutate a target document.
+- Undo History is exposed as an immutable per-document snapshot with stable entry IDs, labels, current position, and saved-revision marker. Jumping to an entry is atomic; a new edit after moving backward follows the documented redo-branch replacement policy.
+
+Essential workflow acceptance criteria:
+
+- Clipboard tests cover empty selection, clipped selection, cross-document paste, external RGBA image exchange, color metadata, alpha, cancellation, and large lazy payload expiration without leaked or partial document state.
+- Document and nested-layer duplication tests prove fresh IDs, preserved ordering/properties, initially shared immutable tiles, and COW isolation after edits; each duplicate command is undone and redone atomically.
+- Command Registry tests prove that menu, shortcut, and palette invocation resolve to the same command ID and availability result for the same snapshot. Shortcut conflict tests cover scopes and keyboard-layout-independent persisted identities.
+- Settings tests cover save/load, schema migration, reset, malformed data fallback, and preservation of the last recoverable settings file.
+- Drag & Drop tests cover ordered multi-file open, image import into the active document, unsupported input, cancellation, and frontend replacement without changing domain behavior.
+- History snapshot and jump tests cover each open document independently, exact revision restoration, saved-state markers, redo-branch replacement after a new edit, and no partially restored state on failure.
 
 ## Toolbar and colors
 

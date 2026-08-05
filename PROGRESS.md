@@ -23,6 +23,16 @@
 - [x] 문서 작업 기록 및 스냅샷에 레이어 명령 통합
 - [ ] 자동 저장 및 충돌 복구 저널
 
+## 핵심 편집 워크플로
+
+- [ ] 잘라내기·복사·붙여넣기 및 외부 클립보드 이미지 교환
+- [ ] 새 안정 ID와 COW 타일 공유를 사용하는 문서·레이어 복제
+- [ ] 사용자 지정 단축키 저장 및 scope별 충돌 검사
+- [ ] UI 중립 명령 레지스트리를 사용하는 Command Palette
+- [ ] 버전형 환경설정 저장·마이그레이션·초기화
+- [ ] 순서가 보존되는 복수 파일 및 이미지 Drag & Drop 열기·가져오기
+- [ ] 문서별 Undo History 스냅샷 패널 및 특정 이력 시점 이동
+
 ## 래스터 및 레이어 코어
 
 - [x] 고정 크기 256×256 premultiplied RGBA8 타일
@@ -49,6 +59,14 @@
 - [x] 브러시 크기·경도·간격·Flow·Opacity 옵션
 - [x] 압력에 따른 dab size 및 opacity 적용 토글
 - [x] Stroke Stabilizer
+- [ ] soft/hard tip을 지원하는 일반 Paint Brush
+- [ ] 색 alpha 및 마스크·채널 coverage를 대상으로 하는 Eraser
+- [ ] 활성 레이어·합성 결과를 선택할 수 있는 Eyedropper
+- [ ] tile 경계를 넘는 tolerance 기반 Paint Bucket
+- [ ] Linear·Radial Gradient 도구와 preview transaction
+- [ ] 버전형 Brush Preset 관리·가져오기·내보내기
+- [ ] 단일 Undo를 보장하는 대칭·미러 페인팅
+- [ ] 고정 source revision 기반 Clone Stamp 및 Healing
 - [x] 사각형 및 타원형 선택 윤곽 마스크 생성
 - [x] 자유형 및 다각형 올가미 마스크 생성
 - [x] Move Layer 명령 통합
