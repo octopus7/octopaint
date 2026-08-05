@@ -50,6 +50,8 @@
 - Include the corresponding completed `REQUESTS.md` record in the commit for an implementation or change request.
 - Do not commit partial work merely to separate files; a commit must represent a coherent completed outcome.
 - When additional steering introduces a logically separate task, complete and commit it separately from the work already in progress.
+- Push each successful commit to the configured remote immediately after creating it.
+- If a push fails, report the failure and resolve it before treating the committed task as fully delivered.
 
 ## README localization
 
