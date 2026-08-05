@@ -396,7 +396,9 @@ struct DocumentSnapshot {
 - 레이어 마스크, 선택 영역, 사용자 알파 채널
 - 필수 블렌드 모드와 레이어 트리 합성
 - Crop, 9-anchor Canvas Resize, 비율/픽셀 Resample
-- 브러시 트랜잭션, dirty tile/mip 캐시, 메모리 예산
+- Pencil, Airbrush, Marquee/Lasso, Move Layer 도구와 브러시 트랜잭션
+- 세로 툴바, 전경/배경색 스와치, HSV 피커 상태 투영
+- dirty tile/mip 캐시, 메모리 예산
 
 완료 기준: 16K 문서의 작은 영역 편집이 전체 문서 복사 없이 동작하고 CPU/HLSL 합성 골든 테스트가 일치한다.
 
@@ -424,12 +426,76 @@ struct DocumentSnapshot {
 
 완료 기준: UI 없이 주요 편집 시나리오를 자동 실행하며, 프런트엔드 교체가 Core 변경 없이 가능함을 검증한다.
 
-## 16. 핵심 결정 요약
+## 16. 도구 시스템과 툴바 투영
+
+도구는 프런트엔드 컨트롤이 아니라 Application에 등록되는 상태 기계다.
+
+```cpp
+enum class ToolKind {
+    Pencil,
+    Airbrush,
+    RectangularMarquee,
+    EllipticalMarquee,
+    FreehandLasso,
+    PolygonalLasso,
+    MoveLayer,
+};
+
+struct PointerSample {
+    PointF documentPosition;
+    float pressure;       // 0..1
+    float tiltX;
+    float tiltY;
+    uint64_t timestampUs;
+    PointerButtons buttons;
+};
+
+struct EditorColors {
+    ColorF foreground;
+    ColorF background;
+};
+```
+
+- 프런트엔드는 WinUI pointer 이벤트를 `PointerSample`로 변환하고 `BeginToolGesture`, `UpdateToolGesture`, `EndToolGesture`를 호출한다.
+- 도구는 진행 중에는 불변 문서 위의 preview overlay만 게시하고, 종료 시 하나의 undo 가능한 명령을 생성한다.
+- 도구 종류, 현재 설정, 전경색과 배경색은 `WorkspaceSnapshot`에 포함한다. WinUI를 다른 프런트엔드로 바꿔도 상태 의미가 유지된다.
+- 도구 단축키와 툴바 그룹은 프런트엔드 표현이지만 ToolKind와 활성화 가능 여부는 Application이 제공한다.
+
+### Pencil
+
+- 입력 위치를 문서 정수 픽셀로 양자화하고 coverage는 항상 0 또는 1이다.
+- 드래그 샘플 사이는 Bresenham 또는 동등한 supercover 정수 선 알고리즘으로 연결하여 빠른 입력에도 구멍이 생기지 않게 한다.
+- 안티앨리어싱, subpixel coverage와 가장자리 feather를 사용하지 않는다.
+- selection coverage, layer mask, alpha lock과 채널 편집 대상을 최종 쓰기 전에 적용한다.
+
+### Airbrush
+
+- 반경, hardness, flow, opacity, spacing, 시간당 spray rate와 pressure 매핑을 직렬화 가능한 설정으로 가진다.
+- 포인터가 정지해도 timestamp 차이에 따라 도료가 누적되며, 샘플 빈도와 무관한 결과를 위해 고정 시간 step으로 적분한다.
+- preview 타일과 commit 타일은 같은 dab 생성기를 사용한다.
+
+### Selection and Move
+
+- Marquee는 Rectangle과 Ellipse 모양을, Lasso는 Freehand와 Polygonal 경로를 제공한다.
+- 모든 선택 도구는 Replace/Add/Subtract/Intersect 결합 모드를 사용한다.
+- 선택 경로는 preview 동안 벡터 형태로 유지하고 commit 시 단일 채널 selection tile로 rasterize한다.
+- MoveLayer는 레이어의 문서 좌표 offset을 preview하고 commit한다. 선택 픽셀 이동은 별도의 MoveSelectionContent 명령으로 분리해 의미를 혼합하지 않는다.
+
+### Vertical toolbar and HSV picker
+
+- WinUI 어댑터는 문서 영역 왼쪽에 세로 툴바를 투영하고 선택된 도구를 시각적으로 강조한다.
+- 툴바 하단에는 전경색을 앞쪽 위, 배경색을 뒤쪽 아래에 겹친 대각선 스와치를 표시한다.
+- SwapColors 명령은 두 색을 교환하고 ResetColors 명령은 검정 전경/흰색 배경으로 복원한다.
+- 각 스와치를 누르면 해당 색을 편집하는 HSV picker flyout을 연다. picker는 Hue, Saturation, Value, Alpha와 RGB/hex 입력을 상호 동기화한다.
+- picker preview는 임시 상태이며 확인 시 SetForegroundColor 또는 SetBackgroundColor 명령 하나로 기록한다.
+
+## 17. 핵심 결정 요약
 
 - UI는 WinUI 3/C++23이지만 제품의 중심 API는 플랫폼 중립 `Application` 명령과 스냅샷이다.
 - 이미지는 희소 256 타일과 Copy-on-Write로 관리해 대형 문서, Undo, 비동기 렌더를 함께 해결한다.
 - 문서 변경은 명령 단위로 원자적 게시하며, 렌더러는 불변 revision만 읽는다.
 - D3D11/HLSL은 기본 가속 경로이고 모든 필수 연산에 CPU 참조 경로를 둔다.
 - 조정과 필터는 버전이 있는 공통 연산자 계약으로 확장한다.
+- 도구는 플랫폼 중립 pointer sample을 받는 Application 상태 기계이며 WinUI 툴바는 이를 투영만 한다.
 - Crop, Canvas Resize, Resample은 데이터 의미가 다르므로 별도 명령으로 유지한다.
 - `.ocp`가 무손실 기준 포맷이고 PNG/JPEG는 평면 내보내기, PSD는 호환성 보고가 있는 변환 포맷이다.

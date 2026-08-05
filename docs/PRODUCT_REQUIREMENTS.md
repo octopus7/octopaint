@@ -89,6 +89,24 @@ Adjustments operate through a frontend-neutral parameter schema so another UI ca
 - Large filters operate on tiles with a declared halo radius so neighboring pixels are available without flattening the full document.
 - CPU SIMD is the correctness fallback; Direct3D compute is the preferred accelerated backend.
 
+## Editing tools
+
+- Pencil: hard-edged, non-antialiased drawing aligned to integer document pixels. A drag must produce a connected pixel path without subpixel coverage.
+- Airbrush: pressure- and time-based paint accumulation with radius, hardness, flow, opacity, spacing, and spray-rate parameters.
+- Selection tools: rectangular marquee, elliptical marquee, freehand lasso, and polygonal lasso. Each supports replace, add, subtract, and intersect modes.
+- Move layer: translates the active layer or selected layer set without flattening it. Preview movement and final commit form one undoable transaction.
+- Tools consume platform-neutral pointer samples and produce preview overlays plus editor commands. They do not mutate WinUI controls or document objects directly.
+
+## Toolbar and colors
+
+- The primary tool palette is a vertical toolbar on the left side of the document workspace.
+- Related tools can share a toolbar group while the current tool remains visibly selected.
+- The bottom of the toolbar contains overlapping foreground and background color swatches arranged diagonally in the familiar image-editor style.
+- A swap action exchanges foreground and background colors; a default-colors action restores black foreground and white background.
+- Activating either swatch opens an HSV-based color picker for that specific color.
+- The picker provides a hue control, saturation/value plane, alpha, RGB/HSV numeric fields, and hexadecimal input.
+- Foreground/background colors and active tool settings belong to frontend-neutral application state so they survive frontend replacement.
+
 ## Geometry operations
 
 ### Crop
@@ -131,8 +149,7 @@ Adjustments operate through a frontend-neutral parameter schema so another UI ca
 ## Initial delivery slices
 
 1. Multi-document workspace, pixel layers, native command/history boundary, and WinUI tab projection.
-2. Direct3D canvas, tile storage, brush foundation, selections, and raster masks.
+2. Direct3D canvas, tile storage, Pencil, Airbrush, selection and move tools, vertical toolbar, HSV colors, and raster masks.
 3. Blend modes, channels, adjustments, Gaussian blur, and geometry operations.
 4. `.ocp` persistence plus PNG and JPEG interchange.
 5. PSD import/export with an explicit compatibility test matrix.
-
