@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" RequiredVersion="5.0.0">
+  <Package
+    Name="OctoPaint"
+    Manufacturer="OctoPaint"
+    Version="$(AppVersion)"
+    UpgradeCode="90FE1FB1-EF13-4845-BED7-179D898BE8D5"
+    Scope="perMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of OctoPaint is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles6432Folder">
+      <Directory Id="INSTALLFOLDER" Name="OctoPaint" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="OctoPaintProgramMenuFolder" Name="OctoPaint" />
+    </StandardDirectory>
+
+    <Feature Id="MainFeature" Title="OctoPaint" Level="1">
+      <Files Include="!(bindpath.Payload)\**" Directory="INSTALLFOLDER" />
+
+      <Component
+        Id="StartMenuShortcutComponent"
+        Guid="3B70ED8A-579C-4660-B896-CB1D69B352F9"
+        Directory="OctoPaintProgramMenuFolder"
+        Bitness="always64">
+        <Shortcut
+          Id="OctoPaintStartMenuShortcut"
+          Name="OctoPaint"
+          Description="OctoPaint"
+          Target="[INSTALLFOLDER]OctoPaint.exe"
+          WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFolder Id="RemoveOctoPaintProgramMenuFolder" On="uninstall" />
+        <RegistryValue
+          Root="HKLM"
+          Key="Software\OctoPaint"
+          Name="Installed"
+          Type="integer"
+          Value="1"
+          KeyPath="yes" />
+      </Component>
+    </Feature>
+  </Package>
+</Wix>

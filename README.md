@@ -62,6 +62,19 @@ Run the headless checks with:
 .\out\bin\x64\Debug\OctoPaint.Core.Tests\OctoPaint.Core.Tests.exe
 ```
 
+## Release packages
+
+Install [WiX Toolset 5 or newer](https://docs.firegiant.com/wix/using-wix/), update `VERSION` with a `major.minor.patch` version, and run:
+
+```bat
+build-release.bat
+```
+
+The script restores dependencies, builds and tests a self-contained Release x64 app, then creates:
+
+- `out\release\OctoPaint-<version>-win-x64.zip`
+- `out\release\OctoPaint-<version>-win-x64.msi`
+
 ## Project status
 
 The repository currently contains the initial C++23 solution scaffold and the first frontend-independent workspace flow. The broader editing and interoperability capabilities above are design targets and will be implemented incrementally.

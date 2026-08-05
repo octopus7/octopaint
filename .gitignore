@@ -39,6 +39,7 @@ BundleArtifacts/
 *.msix
 *.msixbundle
 *.msixupload
+*.msi
 
 # Test and profiling output
 TestResults/

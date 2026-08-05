@@ -62,6 +62,19 @@ Visual Studio 2022에서 `OctoPaint.sln`을 열고 `x64` 플랫폼을 선택하�
 .\out\bin\x64\Debug\OctoPaint.Core.Tests\OctoPaint.Core.Tests.exe
 ```
 
+## 릴리스 패키지
+
+[WiX Toolset 5 이상](https://docs.firegiant.com/wix/using-wix/)을 설치하고 `VERSION`을 `major.minor.patch` 형식으로 갱신한 뒤 다음 파일을 실행합니다.
+
+```bat
+build-release.bat
+```
+
+스크립트는 의존성을 복원하고 자체 포함 Release x64 앱을 빌드·테스트한 다음 아래 파일을 생성합니다.
+
+- `out\release\OctoPaint-<version>-win-x64.zip`
+- `out\release\OctoPaint-<version>-win-x64.msi`
+
 ## 프로젝트 상태
 
 현재 저장소에는 초기 C++23 솔루션 스캐폴드와 첫 프런트엔드 독립 작업 공간 흐름이 구현되어 있습니다. 위의 광범위한 편집 및 상호 운용 기능은 설계 목표이며 단계적으로 구현할 예정입니다.
