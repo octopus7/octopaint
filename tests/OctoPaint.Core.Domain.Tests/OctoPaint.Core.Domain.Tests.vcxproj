@@ -5,13 +5,13 @@
     <ProjectConfiguration Include="Release|x64"><Configuration>Release</Configuration><Platform>x64</Platform></ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{6CBA5B82-9CE0-4E11-B4BC-F22235E23168}</ProjectGuid>
-    <RootNamespace>OctoPaint.Core</RootNamespace>
-    <ProjectName>OctoPaint.Core</ProjectName>
+    <ProjectGuid>{4B9C0734-2577-4A4B-B0E9-C4B5A0A5A69C}</ProjectGuid>
+    <RootNamespace>OctoPaint.Core.Domain.Tests</RootNamespace>
+    <ProjectName>OctoPaint.Core.Domain.Tests</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Label="Configuration">
-    <ConfigurationType>StaticLibrary</ConfigurationType>
+    <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
     <UseDebugLibraries Condition="'$(Configuration)'=='Release'">false</UseDebugLibraries>
     <WholeProgramOptimization Condition="'$(Configuration)'=='Release'">true</WholeProgramOptimization>
@@ -19,16 +19,16 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\..\src\OctoPaint.Core\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="include\octopaint\core\Document.h" />
-    <ClInclude Include="include\octopaint\core\Layer.h" />
-    <ClInclude Include="include\octopaint\core\Tile.h" />
-    <ClCompile Include="src\Document.cpp" />
-    <ClCompile Include="src\Layer.cpp" />
-    <ClCompile Include="src\Tile.cpp" />
+    <ClCompile Include="main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\OctoPaint.Core\OctoPaint.Core.vcxproj">
+      <Project>{6CBA5B82-9CE0-4E11-B4BC-F22235E23168}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
 </Project>
