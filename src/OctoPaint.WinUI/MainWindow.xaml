@@ -9,40 +9,307 @@
     Title="OctoPaint">
 
     <Grid x:Name="RootGrid" Loaded="RootGrid_Loaded" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.Resources>
+            <Style x:Key="ToolToggleStyle" TargetType="ToggleButton">
+                <Setter Property="Width" Value="48" />
+                <Setter Property="Height" Value="44" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="Margin" Value="0,2" />
+                <Setter Property="FontSize" Value="22" />
+                <Setter Property="Padding" Value="4" />
+            </Style>
+
+            <Flyout x:Name="ColorEditorFlyout" Closed="ColorEditorFlyout_Closed">
+                <StackPanel Width="292" Spacing="10">
+                    <TextBlock x:Name="ColorEditorTitle" Text="Edit color" Style="{ThemeResource SubtitleTextBlockStyle}" />
+
+                    <Grid ColumnSpacing="8" RowSpacing="6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="36" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="48" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Text="H" VerticalAlignment="Center" />
+                        <Slider x:Name="HueSlider" Grid.Row="0" Grid.Column="1" Minimum="0" Maximum="360" StepFrequency="1" ValueChanged="ColorSlider_ValueChanged" AutomationProperties.Name="Hue" />
+                        <TextBlock x:Name="HueValueText" Grid.Row="0" Grid.Column="2" VerticalAlignment="Center" TextAlignment="Right" />
+
+                        <TextBlock Grid.Row="1" Text="S" VerticalAlignment="Center" />
+                        <Slider x:Name="SaturationSlider" Grid.Row="1" Grid.Column="1" Minimum="0" Maximum="100" StepFrequency="1" ValueChanged="ColorSlider_ValueChanged" AutomationProperties.Name="Saturation" />
+                        <TextBlock x:Name="SaturationValueText" Grid.Row="1" Grid.Column="2" VerticalAlignment="Center" TextAlignment="Right" />
+
+                        <TextBlock Grid.Row="2" Text="V" VerticalAlignment="Center" />
+                        <Slider x:Name="ValueSlider" Grid.Row="2" Grid.Column="1" Minimum="0" Maximum="100" StepFrequency="1" ValueChanged="ColorSlider_ValueChanged" AutomationProperties.Name="Value" />
+                        <TextBlock x:Name="ValueValueText" Grid.Row="2" Grid.Column="2" VerticalAlignment="Center" TextAlignment="Right" />
+
+                        <TextBlock Grid.Row="3" Text="A" VerticalAlignment="Center" />
+                        <Slider x:Name="AlphaSlider" Grid.Row="3" Grid.Column="1" Minimum="0" Maximum="100" StepFrequency="1" ValueChanged="ColorSlider_ValueChanged" AutomationProperties.Name="Alpha" />
+                        <TextBlock x:Name="AlphaValueText" Grid.Row="3" Grid.Column="2" VerticalAlignment="Center" TextAlignment="Right" />
+                    </Grid>
+
+                    <Grid ColumnSpacing="6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <NumberBox x:Name="RedNumberBox" Header="R" Minimum="0" Maximum="255" SpinButtonPlacementMode="Compact" ValueChanged="RgbNumberBox_ValueChanged" AutomationProperties.Name="Red" />
+                        <NumberBox x:Name="GreenNumberBox" Grid.Column="1" Header="G" Minimum="0" Maximum="255" SpinButtonPlacementMode="Compact" ValueChanged="RgbNumberBox_ValueChanged" AutomationProperties.Name="Green" />
+                        <NumberBox x:Name="BlueNumberBox" Grid.Column="2" Header="B" Minimum="0" Maximum="255" SpinButtonPlacementMode="Compact" ValueChanged="RgbNumberBox_ValueChanged" AutomationProperties.Name="Blue" />
+                    </Grid>
+
+                    <TextBox x:Name="HexTextBox" Header="Hex (#RRGGBB)" MaxLength="7" TextChanged="HexTextBox_TextChanged" AutomationProperties.Name="Hexadecimal RGB color" />
+
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border x:Name="ColorEditorPreview" Width="48" Height="28" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="3" HorizontalAlignment="Left" />
+                        <Button Grid.Column="1" Content="Cancel" Click="CancelColor_Click" AutomationProperties.Name="Cancel color changes" />
+                        <Button Grid.Column="2" Content="Apply" Click="ApplyColor_Click" Style="{ThemeResource AccentButtonStyle}" AutomationProperties.Name="Apply color changes" />
+                    </Grid>
+                </StackPanel>
+            </Flyout>
+
+            <ContentDialog
+                x:Name="SensitivityDialog"
+                Title="Input sensitivity"
+                PrimaryButtonText="Apply"
+                CloseButtonText="Cancel"
+                DefaultButton="Primary"
+                PrimaryButtonClick="SensitivityDialog_PrimaryButtonClick"
+                AutomationProperties.Name="Input sensitivity settings">
+                <ScrollViewer MaxHeight="520" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Width="360" Spacing="12">
+                        <TextBlock Text="Pressure response" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                        <ComboBox
+                            x:Name="PressureCurveComboBox"
+                            Header="Pressure curve"
+                            HorizontalAlignment="Stretch"
+                            ToolTipService.ToolTip="Choose a starting shape for the stylus pressure response curve."
+                            AutomationProperties.Name="Pressure response curve">
+                            <ComboBoxItem Content="Linear" />
+                            <ComboBoxItem Content="Soft" />
+                            <ComboBoxItem Content="Firm" />
+                            <ComboBoxItem Content="Custom gamma" />
+                        </ComboBox>
+                        <NumberBox
+                            x:Name="PressureGammaNumberBox"
+                            Header="Curve gamma"
+                            Minimum="0.10"
+                            Maximum="4.00"
+                            SmallChange="0.05"
+                            SpinButtonPlacementMode="Compact"
+                            ToolTipService.ToolTip="Lower gamma responds sooner; higher gamma requires firmer pressure."
+                            AutomationProperties.Name="Pressure curve gamma" />
+                        <TextBlock Text="Stroke stabilizer" Margin="0,8,0,0" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                        <NumberBox
+                            x:Name="StabilizerStrengthNumberBox"
+                            Header="Strength (%)"
+                            Minimum="0"
+                            Maximum="100"
+                            SmallChange="1"
+                            SpinButtonPlacementMode="Compact"
+                            ToolTipService.ToolTip="Set how strongly the stroke follows the stabilized path."
+                            AutomationProperties.Name="Stroke stabilizer strength" />
+                        <NumberBox
+                            x:Name="StabilizerSmoothingNumberBox"
+                            Header="Smoothing (%)"
+                            Minimum="0"
+                            Maximum="100"
+                            SmallChange="1"
+                            SpinButtonPlacementMode="Compact"
+                            ToolTipService.ToolTip="Set how much short pointer movement is smoothed."
+                            AutomationProperties.Name="Stroke stabilizer smoothing" />
+                        <TextBlock
+                            Text="These values are currently held by the WinUI adapter and will move to the application tool-options port."
+                            Opacity="0.65"
+                            TextWrapping="Wrap"
+                            Style="{ThemeResource CaptionTextBlockStyle}" />
+                    </StackPanel>
+                </ScrollViewer>
+            </ContentDialog>
+        </Grid.Resources>
+
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <CommandBar Grid.Row="0" DefaultLabelPosition="Right">
-            <AppBarButton Icon="Add" Label="New document" Click="NewDocument_Click" />
+        <MenuBar Grid.Row="0" AutomationProperties.Name="Main menu">
+            <MenuBarItem Title="File">
+                <MenuFlyoutItem Text="New" Click="NewDocument_Click" />
+                <MenuFlyoutItem Text="Open…" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem Text="Save" />
+                <MenuFlyoutItem Text="Save As…" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem Text="Exit" />
+            </MenuBarItem>
+            <MenuBarItem Title="Edit">
+                <MenuFlyoutItem Text="Undo" />
+                <MenuFlyoutItem Text="Redo" />
+                <MenuFlyoutSeparator />
+                <MenuFlyoutItem Text="Cut" />
+                <MenuFlyoutItem Text="Copy" />
+                <MenuFlyoutItem Text="Paste" />
+            </MenuBarItem>
+            <MenuBarItem Title="Image">
+                <MenuFlyoutItem Text="Adjustments" />
+                <MenuFlyoutItem Text="Canvas Size…" />
+                <MenuFlyoutItem Text="Image Size…" />
+            </MenuBarItem>
+            <MenuBarItem Title="Layer">
+                <MenuFlyoutItem Text="New Layer" />
+                <MenuFlyoutItem Text="Duplicate Layer" />
+                <MenuFlyoutItem Text="Delete Layer" />
+            </MenuBarItem>
+            <MenuBarItem Title="Select">
+                <MenuFlyoutItem Text="Select All" />
+                <MenuFlyoutItem Text="Deselect" />
+                <MenuFlyoutItem Text="Invert Selection" />
+            </MenuBarItem>
+            <MenuBarItem Title="Filter">
+                <MenuFlyoutItem Text="Gaussian Blur…" />
+            </MenuBarItem>
+            <MenuBarItem Title="View">
+                <MenuFlyoutItem Text="Zoom In" />
+                <MenuFlyoutItem Text="Zoom Out" />
+                <MenuFlyoutItem Text="Reset View" />
+            </MenuBarItem>
+            <MenuBarItem Title="Help">
+                <MenuFlyoutItem Text="About OctoPaint" />
+            </MenuBarItem>
+        </MenuBar>
+
+        <Border Grid.Row="1" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,1">
+            <ScrollViewer
+                HorizontalScrollBarVisibility="Auto"
+                HorizontalScrollMode="Enabled"
+                VerticalScrollBarVisibility="Disabled"
+                VerticalScrollMode="Disabled"
+                AutomationProperties.Name="Tool options bar">
+                <StackPanel Orientation="Horizontal" MinWidth="1560" Padding="10,6" Spacing="10" VerticalAlignment="Center">
+                    <TextBlock Text="Tool Options" VerticalAlignment="Center" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                    <NumberBox x:Name="BrushSizeNumberBox" Width="112" Header="Brush size (px)" Minimum="1" Maximum="2000" SmallChange="1" SpinButtonPlacementMode="Compact" ValueChanged="ToolOptionNumberBox_ValueChanged" ToolTipService.ToolTip="Set the brush dab diameter in pixels." AutomationProperties.Name="Brush size in pixels" />
+                    <NumberBox x:Name="HardnessNumberBox" Width="104" Header="Hardness (%)" Minimum="0" Maximum="100" SmallChange="1" SpinButtonPlacementMode="Compact" ValueChanged="ToolOptionNumberBox_ValueChanged" ToolTipService.ToolTip="Set the hardness of the brush edge." AutomationProperties.Name="Brush hardness percent" />
+                    <NumberBox x:Name="SpacingNumberBox" Width="104" Header="Spacing (%)" Minimum="1" Maximum="500" SmallChange="1" SpinButtonPlacementMode="Compact" ValueChanged="ToolOptionNumberBox_ValueChanged" ToolTipService.ToolTip="Set the distance between brush dabs as a percentage of brush size." AutomationProperties.Name="Brush spacing percent" />
+                    <NumberBox x:Name="FlowNumberBox" Width="92" Header="Flow (%)" Minimum="0" Maximum="100" SmallChange="1" SpinButtonPlacementMode="Compact" ValueChanged="ToolOptionNumberBox_ValueChanged" ToolTipService.ToolTip="Set how quickly paint accumulates during a stroke." AutomationProperties.Name="Brush flow percent" />
+                    <NumberBox x:Name="OpacityNumberBox" Width="96" Header="Opacity (%)" Minimum="0" Maximum="100" SmallChange="1" SpinButtonPlacementMode="Compact" ValueChanged="ToolOptionNumberBox_ValueChanged" ToolTipService.ToolTip="Set the maximum opacity of the stroke." AutomationProperties.Name="Brush opacity percent" />
+                    <Border Width="1" Height="40" Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                    <StackPanel MinWidth="190" VerticalAlignment="Center">
+                        <TextBlock Text="Input device" Style="{ThemeResource CaptionTextBlockStyle}" />
+                        <TextBlock x:Name="StylusStatusText" Text="Mouse input — stylus not detected" TextWrapping="NoWrap" ToolTipService.ToolTip="Pressure controls become available after a pen or stylus pointer is detected on the canvas." AutomationProperties.Name="Stylus detection status" />
+                    </StackPanel>
+                    <CheckBox x:Name="PressureSizeCheckBox" Content="Pressure affects dab size" IsEnabled="False" Click="ToolOptionToggle_Click" ToolTipService.ToolTip="Use stylus pressure to change brush dab size." AutomationProperties.Name="Pressure affects dab size" />
+                    <CheckBox x:Name="PressureOpacityCheckBox" Content="Pressure affects opacity" IsEnabled="False" Click="ToolOptionToggle_Click" ToolTipService.ToolTip="Use stylus pressure to change brush opacity." AutomationProperties.Name="Pressure affects opacity" />
+                    <CheckBox x:Name="StrokeStabilizerCheckBox" Content="Stroke Stabilizer" Click="ToolOptionToggle_Click" ToolTipService.ToolTip="Smooth pointer movement while drawing." AutomationProperties.Name="Stroke stabilizer" />
+                    <Button Content="Sensitivity…" Click="SensitivityButton_Click" ToolTipService.ToolTip="Configure pressure response and stroke stabilization." AutomationProperties.Name="Open input sensitivity settings" />
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <CommandBar Grid.Row="2" DefaultLabelPosition="Right">
+            <AppBarButton Icon="Add" Label="New document" Click="NewDocument_Click" AutomationProperties.Name="New document" />
         </CommandBar>
 
-        <Grid Grid.Row="1" ColumnSpacing="1">
+        <Grid Grid.Row="3" ColumnSpacing="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="220" />
+                <ColumnDefinition Width="88" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="260" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Padding="16" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="Tools" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                    <TextBlock Text="Frontend-only placeholder" Opacity="0.65" TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-
-            <Border Grid.Column="1" Margin="12" Background="#202124" CornerRadius="6">
+            <Border Grid.Column="0" Padding="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <Grid>
-                    <TextBlock
-                        x:Name="DocumentTitleText"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Foreground="White"
-                        FontSize="24" />
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Text="Tools" HorizontalAlignment="Center" Style="{ThemeResource CaptionTextBlockStyle}" />
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="0,6,0,8" Spacing="1">
+                            <ToggleButton x:Name="PencilToolButton" Tag="Pencil" IsChecked="True" Click="ToolButton_Click" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Pencil" AutomationProperties.Name="Pencil tool">
+                                <TextBlock Text="✎" />
+                            </ToggleButton>
+                            <ToggleButton x:Name="AirbrushToolButton" Tag="Airbrush" Click="ToolButton_Click" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Airbrush" AutomationProperties.Name="Airbrush tool">
+                                <TextBlock Text="✺" />
+                            </ToggleButton>
+                            <ToggleButton x:Name="RectangularMarqueeToolButton" Tag="Rectangular Marquee" Click="ToolButton_Click" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Rectangular Marquee" AutomationProperties.Name="Rectangular marquee selection tool">
+                                <TextBlock Text="▭" />
+                            </ToggleButton>
+                            <ToggleButton x:Name="EllipticalMarqueeToolButton" Tag="Elliptical Marquee" Click="ToolButton_Click" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Elliptical Marquee" AutomationProperties.Name="Elliptical marquee selection tool">
+                                <TextBlock Text="◯" />
+                            </ToggleButton>
+                            <ToggleButton x:Name="FreehandLassoToolButton" Tag="Freehand Lasso" Click="ToolButton_Click" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Freehand Lasso" AutomationProperties.Name="Freehand lasso selection tool">
+                                <TextBlock Text="〰" />
+                            </ToggleButton>
+                            <ToggleButton x:Name="PolygonalLassoToolButton" Tag="Polygonal Lasso" Click="ToolButton_Click" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Polygonal Lasso" AutomationProperties.Name="Polygonal lasso selection tool">
+                                <TextBlock Text="◇" />
+                            </ToggleButton>
+                            <ToggleButton x:Name="MoveLayerToolButton" Tag="Move Layer" Click="ToolButton_Click" Style="{StaticResource ToolToggleStyle}" ToolTipService.ToolTip="Move Layer" AutomationProperties.Name="Move layer tool">
+                                <TextBlock Text="✥" />
+                            </ToggleButton>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <StackPanel Grid.Row="2" HorizontalAlignment="Center" Spacing="5">
+                        <Grid Width="64" Height="64">
+                            <Button x:Name="BackgroundSwatchButton" Width="42" Height="42" HorizontalAlignment="Right" VerticalAlignment="Bottom" Padding="4" Click="BackgroundSwatch_Click" ToolTipService.ToolTip="Edit background color" AutomationProperties.Name="Background color">
+                                <Border x:Name="BackgroundSwatchPreview" Width="30" Height="30" BorderBrush="{ThemeResource TextFillColorPrimaryBrush}" BorderThickness="1" />
+                            </Button>
+                            <Button x:Name="ForegroundSwatchButton" Width="42" Height="42" HorizontalAlignment="Left" VerticalAlignment="Top" Padding="4" Click="ForegroundSwatch_Click" ToolTipService.ToolTip="Edit foreground color" AutomationProperties.Name="Foreground color" Canvas.ZIndex="1">
+                                <Border x:Name="ForegroundSwatchPreview" Width="30" Height="30" BorderBrush="{ThemeResource TextFillColorPrimaryBrush}" BorderThickness="1" />
+                            </Button>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="4">
+                            <Button Width="30" Height="28" Padding="2" Content="⇄" Click="SwapColors_Click" ToolTipService.ToolTip="Swap foreground and background colors" AutomationProperties.Name="Swap foreground and background colors" />
+                            <Button Width="30" Height="28" Padding="2" Content="◩" Click="ResetColors_Click" ToolTipService.ToolTip="Reset colors to black and white" AutomationProperties.Name="Reset foreground and background colors" />
+                        </StackPanel>
+                    </StackPanel>
                 </Grid>
             </Border>
+
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <TabView
+                    x:Name="DocumentTabs"
+                    Grid.Row="0"
+                    IsAddTabButtonVisible="False"
+                    TabWidthMode="SizeToContent"
+                    SelectionChanged="DocumentTabs_SelectionChanged"
+                    TabCloseRequested="DocumentTabs_TabCloseRequested"
+                    AutomationProperties.Name="Open documents" />
+
+                <Border x:Name="CanvasSurface" Grid.Row="1" Margin="12" Background="#202124" CornerRadius="6" PointerPressed="Canvas_PointerInput" PointerMoved="Canvas_PointerInput">
+                    <Grid>
+                        <TextBlock
+                            x:Name="DocumentTitleText"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Foreground="White"
+                            FontSize="24" />
+                    </Grid>
+                </Border>
+            </Grid>
 
             <Border Grid.Column="2" Padding="16" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <StackPanel Spacing="8">
@@ -52,9 +319,10 @@
             </Border>
         </Grid>
 
-        <Border Grid.Row="2" Padding="12,6" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
+        <Border Grid.Row="4" Padding="12,6" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
             <TextBlock x:Name="StatusText" />
         </Border>
+
     </Grid>
 </Window>
 
