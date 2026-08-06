@@ -59,6 +59,7 @@
 - [x] 브러시 크기·경도·간격·Flow·Opacity 옵션
 - [x] 압력에 따른 dab size 및 opacity 적용 토글
 - [x] Stroke Stabilizer
+- [x] Pencil/Airbrush 스트로크의 Application 원자적 적용·Undo/Redo 및 BGRA 스냅샷
 - [x] 활성 도구·전경/배경색·브러시·압력·Stabilizer 설정을 보관하는 UI 중립 `EditorState`
 - [ ] soft/hard tip을 지원하는 일반 Paint Brush
 - [ ] 색 alpha 및 마스크·채널 coverage를 대상으로 하는 Eraser
@@ -117,6 +118,7 @@
 - [x] 페인팅·선택·압력 감도·Stroke Stabilizer 테스트
 - [x] Application 레이어 명령 및 문서 격리 테스트
 - [x] Application 편집 도구 상태 및 입력 검증 테스트
+- [x] Application Pencil/Airbrush 적용·Undo/Redo·BGRA 스냅샷 테스트
 - [x] 릴리스 배치에서 6개 headless 테스트 실행 및 실패 전파
 - [x] `VERSION` 버전 정보 원본
 - [x] 버전을 포함한 `OctoPaint-<version>-win-x64.zip` 빌드 흐름

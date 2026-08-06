@@ -2,12 +2,14 @@
 
 #include <octopaint/core/Document.h>
 #include <octopaint/core/Layer.h>
+#include <octopaint/core/Tools.h>
 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <format>
 #include <limits>
+#include <ranges>
 #include <stdexcept>
 #include <utility>
 
@@ -142,6 +144,230 @@ namespace octopaint::application::detail
 
 namespace octopaint::application
 {
+    class PaintStrokeCommand final : public DocumentCommand
+    {
+    public:
+        PaintStrokeCommand(PaintStrokeRequest request, CanvasSize const canvas_size)
+            : request_(std::move(request)), canvas_size_(canvas_size)
+        {
+        }
+
+        [[nodiscard]] std::string Label() const override
+        {
+            return request_.tool == PaintTool::Pencil ? "Pencil stroke" : "Airbrush stroke";
+        }
+
+        void Execute(DocumentMutation& document) override
+        {
+            auto& state = *static_cast<detail::LayerDocumentState*>(document.layers_);
+            auto* const layer = detail::Find(state, request_.layer_id);
+            if (!layer || layer->Kind() != core::LayerKind::Raster)
+            {
+                throw std::logic_error("The paint target is no longer a raster layer.");
+            }
+
+            auto& tiles = static_cast<core::RasterLayer*>(layer)->Tiles();
+            if (after_)
+            {
+                tiles = *after_;
+                return;
+            }
+
+            before_ = tiles;
+            auto candidate = tiles;
+            auto pixels = Rasterize();
+            pixels.erase(std::remove_if(pixels.begin(), pixels.end(), [this](core::PaintPixel const& pixel)
+            {
+                return pixel.position.x < 0 || pixel.position.y < 0
+                    || static_cast<std::uint64_t>(pixel.position.x) >= canvas_size_.width
+                    || static_cast<std::uint64_t>(pixel.position.y) >= canvas_size_.height;
+            }), pixels.end());
+
+            if (!pixels.empty())
+            {
+                auto min_x = pixels.front().position.x;
+                auto max_x = min_x;
+                auto min_y = pixels.front().position.y;
+                auto max_y = min_y;
+                for (auto const& pixel : pixels)
+                {
+                    min_x = std::min(min_x, pixel.position.x);
+                    max_x = std::max(max_x, pixel.position.x);
+                    min_y = std::min(min_y, pixel.position.y);
+                    max_y = std::max(max_y, pixel.position.y);
+                }
+                changed_bounds_ = PixelBounds{
+                    min_x,
+                    min_y,
+                    static_cast<std::uint32_t>(static_cast<std::int64_t>(max_x) - min_x + 1),
+                    static_cast<std::uint32_t>(static_cast<std::int64_t>(max_y) - min_y + 1)
+                };
+                core::ApplyPaintPixels(
+                    candidate,
+                    pixels,
+                    { .alpha_locked = layer->Properties().alpha_locked });
+            }
+
+            changed_ = !TileStoresEqual(*before_, candidate);
+            if (!changed_)
+            {
+                changed_bounds_.reset();
+                return;
+            }
+            after_ = std::move(candidate);
+            tiles = *after_;
+        }
+
+        void Undo(DocumentMutation& document) override
+        {
+            if (!changed_ || !before_)
+            {
+                throw std::logic_error("Cannot undo a paint stroke that did not change pixels.");
+            }
+            auto& state = *static_cast<detail::LayerDocumentState*>(document.layers_);
+            auto* const layer = detail::Find(state, request_.layer_id);
+            if (!layer || layer->Kind() != core::LayerKind::Raster)
+            {
+                throw std::logic_error("The paint target is no longer a raster layer.");
+            }
+            static_cast<core::RasterLayer*>(layer)->Tiles() = *before_;
+        }
+
+        [[nodiscard]] bool Changed() const noexcept { return changed_; }
+        [[nodiscard]] std::optional<PixelBounds> ChangedBounds() const noexcept { return changed_bounds_; }
+
+    private:
+        [[nodiscard]] static bool TileStoresEqual(
+            core::SparseTileStore const& left,
+            core::SparseTileStore const& right)
+        {
+            auto const left_keys = left.Keys();
+            auto const right_keys = right.Keys();
+            if (left_keys != right_keys)
+            {
+                return false;
+            }
+            for (auto const key : left_keys)
+            {
+                auto const left_tile = left.Read(key);
+                auto const right_tile = right.Read(key);
+                if (!left_tile || !right_tile
+                    || !std::ranges::equal(left_tile->Pixels(), right_tile->Pixels()))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        [[nodiscard]] std::vector<core::StylusSample> StabilizedSamples() const
+        {
+            core::PressureMapper pressure_mapper({
+                request_.pressure.minimum_input,
+                request_.pressure.maximum_input,
+                request_.pressure.gamma
+            });
+            core::StrokeStabilizer stabilizer({
+                request_.stabilizer.enabled,
+                request_.stabilizer.strength
+            });
+
+            std::vector<core::StylusSample> samples;
+            samples.reserve(request_.samples.size() + 1);
+            for (auto const& input : request_.samples)
+            {
+                if (!std::isfinite(input.x) || !std::isfinite(input.y)
+                    || input.x < static_cast<double>(std::numeric_limits<std::int32_t>::min())
+                    || input.x > static_cast<double>(std::numeric_limits<std::int32_t>::max())
+                    || input.y < static_cast<double>(std::numeric_limits<std::int32_t>::min())
+                    || input.y > static_cast<double>(std::numeric_limits<std::int32_t>::max())
+                    || !std::isfinite(input.elapsed_seconds) || input.elapsed_seconds < 0.0)
+                {
+                    throw std::invalid_argument("Paint samples must have finite coordinates and non-negative elapsed time.");
+                }
+                samples.push_back(stabilizer.Push({
+                    {
+                        static_cast<std::int32_t>(std::llround(input.x)),
+                        static_cast<std::int32_t>(std::llround(input.y))
+                    },
+                    pressure_mapper.Map(input.pressure)
+                }));
+            }
+            if (auto const endpoint = stabilizer.Flush())
+            {
+                samples.push_back(*endpoint);
+            }
+            return samples;
+        }
+
+        [[nodiscard]] std::vector<core::PaintPixel> Rasterize() const
+        {
+            auto const samples = StabilizedSamples();
+            if (samples.empty())
+            {
+                return {};
+            }
+            core::Rgba8 const color{
+                request_.color.red,
+                request_.color.green,
+                request_.color.blue,
+                request_.color.alpha
+            };
+            std::vector<core::PaintPixel> pixels;
+            if (request_.tool == PaintTool::Pencil)
+            {
+                for (std::size_t index = 0; index < samples.size(); ++index)
+                {
+                    auto segment = core::RasterizePencilSamples(
+                        index == 0 ? samples[index] : samples[index - 1], samples[index], color);
+                    if (index > 0 && !segment.empty())
+                    {
+                        segment.erase(segment.begin());
+                    }
+                    auto const pressure_opacity = request_.brush.pressure_affects_opacity
+                        ? samples[index].pressure : 1.0F;
+                    for (auto& pixel : segment)
+                    {
+                        pixel.opacity = request_.brush.opacity * pressure_opacity;
+                    }
+                    pixels.insert(pixels.end(), segment.begin(), segment.end());
+                }
+                return pixels;
+            }
+
+            core::AirbrushAccumulator accumulator({
+                .radius = request_.brush.radius,
+                .flow_per_second = request_.brush.flow_per_second,
+                .fixed_timestep_seconds = request_.brush.fixed_timestep_seconds,
+                .hardness = request_.brush.hardness,
+                .spacing = request_.brush.spacing,
+                .opacity = request_.brush.opacity,
+                .pressure_affects_size = request_.brush.pressure_affects_size,
+                .pressure_affects_opacity = request_.brush.pressure_affects_opacity
+            });
+            for (std::size_t index = 0; index < samples.size(); ++index)
+            {
+                auto const elapsed = index < request_.samples.size()
+                    ? request_.samples[index].elapsed_seconds : 0.0;
+                auto dabs = accumulator.Advance(
+                    index == 0 ? samples[index] : samples[index - 1],
+                    samples[index],
+                    elapsed,
+                    color);
+                auto dab_pixels = core::RasterizeDabs(dabs);
+                pixels.insert(pixels.end(), dab_pixels.begin(), dab_pixels.end());
+            }
+            return pixels;
+        }
+
+        PaintStrokeRequest request_;
+        CanvasSize canvas_size_;
+        std::optional<core::SparseTileStore> before_;
+        std::optional<core::SparseTileStore> after_;
+        std::optional<PixelBounds> changed_bounds_;
+        bool changed_{};
+    };
+
     struct Workspace::Impl final
     {
         struct HistoryEntry final
@@ -947,6 +1173,168 @@ namespace octopaint::application
             throw std::logic_error("The workspace has no active document.");
         }
         MarkSaved(*impl_->active_document_id);
+    }
+
+    PaintStrokeResult Workspace::ApplyPaintStroke(PaintStrokeRequest const& request)
+    {
+        auto* const open_document = impl_->Find(request.document_id);
+        if (!open_document)
+        {
+            return { .status = PaintStrokeStatus::DocumentNotFound };
+        }
+        auto* const layer = detail::Find(open_document->layers, request.layer_id);
+        if (!layer)
+        {
+            return { .status = PaintStrokeStatus::LayerNotFound };
+        }
+        if (layer->Kind() != core::LayerKind::Raster)
+        {
+            return { .status = PaintStrokeStatus::LayerNotRaster };
+        }
+        if (layer->Properties().locked)
+        {
+            return { .status = PaintStrokeStatus::LayerLocked };
+        }
+        if (request.samples.empty()
+            || (request.tool != PaintTool::Pencil && request.tool != PaintTool::Airbrush))
+        {
+            return { .status = PaintStrokeStatus::InvalidRequest };
+        }
+
+        try
+        {
+            auto const document_size = open_document->document.Size();
+            if (document_size.width > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max())
+                || document_size.height > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max()))
+            {
+                return { .status = PaintStrokeStatus::InvalidRequest };
+            }
+
+            // Reserve before touching pixels, so allocation failure cannot leave
+            // a stroke applied without its matching history entry.
+            open_document->history.reserve(open_document->history.size() + 1);
+            auto command = std::make_unique<PaintStrokeCommand>(
+                request,
+                CanvasSize{ document_size.width, document_size.height });
+            DocumentMutation mutation{ &open_document->document, &open_document->layers };
+            command->Execute(mutation);
+            if (!command->Changed())
+            {
+                return { .status = PaintStrokeStatus::NoPixels };
+            }
+
+            auto const bounds = command->ChangedBounds();
+            if (open_document->history_position < open_document->history.size())
+            {
+                open_document->history.erase(
+                    open_document->history.begin()
+                        + static_cast<std::ptrdiff_t>(open_document->history_position),
+                    open_document->history.end());
+            }
+            auto const before_revision = open_document->current_revision;
+            auto const after_revision = open_document->next_revision++;
+            open_document->history.push_back({
+                .command = std::move(command),
+                .before_revision = before_revision,
+                .after_revision = after_revision
+            });
+            open_document->history_position = open_document->history.size();
+            open_document->current_revision = after_revision;
+            return { .status = PaintStrokeStatus::Applied, .changed_bounds = bounds };
+        }
+        catch (std::invalid_argument const&)
+        {
+            return { .status = PaintStrokeStatus::InvalidRequest };
+        }
+        catch (std::length_error const&)
+        {
+            return { .status = PaintStrokeStatus::InvalidRequest };
+        }
+        catch (std::overflow_error const&)
+        {
+            return { .status = PaintStrokeStatus::InvalidRequest };
+        }
+    }
+
+    std::optional<RasterPixelSnapshot> Workspace::SnapshotRasterLayerPixels(
+        DocumentId const document_id,
+        LayerId const layer_id) const
+    {
+        auto const* const open_document = impl_->Find(document_id);
+        if (!open_document)
+        {
+            return std::nullopt;
+        }
+        auto const* const layer = detail::Find(open_document->layers, layer_id);
+        if (!layer || layer->Kind() != core::LayerKind::Raster)
+        {
+            return std::nullopt;
+        }
+
+        auto const core_size = open_document->document.Size();
+        auto const width = static_cast<std::size_t>(core_size.width);
+        auto const height = static_cast<std::size_t>(core_size.height);
+        if (width > std::numeric_limits<std::size_t>::max() / core::Rgba8BytesPerPixel)
+        {
+            throw std::length_error("Raster snapshot row stride exceeds addressable memory.");
+        }
+        auto const row_stride = width * core::Rgba8BytesPerPixel;
+        if (height != 0 && row_stride > std::numeric_limits<std::size_t>::max() / height)
+        {
+            throw std::length_error("Raster snapshot exceeds addressable memory.");
+        }
+
+        RasterPixelSnapshot snapshot{
+            .document_id = document_id,
+            .layer_id = layer_id,
+            .size = { core_size.width, core_size.height },
+            .revision = open_document->current_revision,
+            .row_stride = row_stride,
+            .pixels_bgra_premultiplied = std::vector<std::byte>(row_stride * height)
+        };
+
+        auto const& tiles = static_cast<core::RasterLayer const*>(layer)->Tiles();
+        for (auto const key : tiles.Keys())
+        {
+            if (key.level != 0)
+            {
+                continue;
+            }
+            auto const payload = tiles.Read(key);
+            if (!payload)
+            {
+                continue;
+            }
+            auto const source = payload->Pixels();
+            auto const origin_x = static_cast<std::int64_t>(key.x) * core::TileExtent;
+            auto const origin_y = static_cast<std::int64_t>(key.y) * core::TileExtent;
+            for (std::uint32_t local_y = 0; local_y < core::TileExtent; ++local_y)
+            {
+                auto const canvas_y = origin_y + local_y;
+                if (canvas_y < 0 || canvas_y >= static_cast<std::int64_t>(core_size.height))
+                {
+                    continue;
+                }
+                for (std::uint32_t local_x = 0; local_x < core::TileExtent; ++local_x)
+                {
+                    auto const canvas_x = origin_x + local_x;
+                    if (canvas_x < 0 || canvas_x >= static_cast<std::int64_t>(core_size.width))
+                    {
+                        continue;
+                    }
+                    auto const source_index =
+                        (static_cast<std::size_t>(local_y) * core::TileExtent + local_x)
+                        * core::Rgba8BytesPerPixel;
+                    auto const destination_index = static_cast<std::size_t>(canvas_y) * row_stride
+                        + static_cast<std::size_t>(canvas_x) * core::Rgba8BytesPerPixel;
+                    snapshot.pixels_bgra_premultiplied[destination_index] = source[source_index + 2];
+                    snapshot.pixels_bgra_premultiplied[destination_index + 1] = source[source_index + 1];
+                    snapshot.pixels_bgra_premultiplied[destination_index + 2] = source[source_index];
+                    snapshot.pixels_bgra_premultiplied[destination_index + 3] = source[source_index + 3];
+                }
+            }
+        }
+        return snapshot;
     }
 
     WorkspaceSnapshot Workspace::Snapshot() const

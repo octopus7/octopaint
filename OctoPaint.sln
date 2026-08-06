@@ -20,6 +20,8 @@ Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "OctoPaint.Application.Layer
 EndProject
 Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "OctoPaint.Application.EditorState.Tests", "tests\OctoPaint.Application.EditorState.Tests\OctoPaint.Application.EditorState.Tests.vcxproj", "{F5439F94-D558-4DD1-A78A-C572E9D7259F}"
 EndProject
+Project("{BC8A1FFA-BEE3-4634-8014-F334798102B3}") = "OctoPaint.Application.Paint.Tests", "tests\OctoPaint.Application.Paint.Tests\OctoPaint.Application.Paint.Tests.vcxproj", "{4EC0C97E-E806-4C60-B902-00E36897E2B1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -62,6 +64,10 @@ Global
 		{F5439F94-D558-4DD1-A78A-C572E9D7259F}.Debug|x64.Build.0 = Debug|x64
 		{F5439F94-D558-4DD1-A78A-C572E9D7259F}.Release|x64.ActiveCfg = Release|x64
 		{F5439F94-D558-4DD1-A78A-C572E9D7259F}.Release|x64.Build.0 = Release|x64
+		{4EC0C97E-E806-4C60-B902-00E36897E2B1}.Debug|x64.ActiveCfg = Debug|x64
+		{4EC0C97E-E806-4C60-B902-00E36897E2B1}.Debug|x64.Build.0 = Debug|x64
+		{4EC0C97E-E806-4C60-B902-00E36897E2B1}.Release|x64.ActiveCfg = Release|x64
+		{4EC0C97E-E806-4C60-B902-00E36897E2B1}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

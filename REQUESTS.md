@@ -530,3 +530,23 @@
 
 - 최신 WinUI 구현이 직접 참조하는 `ToolOptionsState.h`를 누락 파일로 남기지 않고 현재 소스 구성에 포함한다.
 - 이번 변경은 누락 파일 포함만 수행하며 편집 상태 아키텍처를 다시 변경하지 않는다.
+
+---
+
+# 요청 시작: 2026-08-06 15:42:57 KST | 작업 완료: 2026-08-06 15:53:39 KST (소요 시간: 0시간 10분 42초)
+
+## 구현 내역
+
+- UI 중립 `PaintStrokeRequest`와 Pencil/Airbrush 스트로크 적용 API를 Application에 추가했다.
+- Core의 Pencil, Airbrush, 압력 감도 및 Stroke Stabilizer 엔진을 활성 Raster Layer의 희소 타일에 연결했다.
+- 스트로크 하나를 문서 이력 하나로 적용하고 정확한 Undo/Redo 타일 상태를 보존하도록 구현했다.
+- 문서 경계 clipping, 일반 잠금, 투명도 잠금, 대상 문서·레이어 및 입력 유효성 검사를 추가했다.
+- 렌더러가 사용할 canvas-sized premultiplied BGRA8 Raster 스냅샷을 UI 비종속 값으로 제공했다.
+- 전용 Application Paint 테스트를 솔루션과 Release 테스트 게이트에 추가하고 Debug/Release x64에서 통과시켰다.
+
+## 결정 내용
+
+- 한 번의 포인터 제스처는 하나의 Application 페인트 요청과 하나의 Undo 항목으로 확정한다.
+- 실패하거나 실제 픽셀이 변하지 않은 요청은 revision, history 및 타일 상태를 변경하지 않는다.
+- WinUI와 D3D 형식은 Application 공개 API에 노출하지 않고 BGRA 바이트 스냅샷만 전달한다.
+- 이번 커밋은 실제 캔버스를 위한 Application 페인팅 경계를 완결하며 WinUI 입력과 D3D 렌더링 연결은 후속 독립 커밋으로 분리한다.

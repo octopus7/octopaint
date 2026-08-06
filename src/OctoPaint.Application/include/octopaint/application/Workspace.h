@@ -10,6 +10,8 @@
 
 namespace octopaint::application
 {
+    class PaintStrokeCommand;
+
     struct CanvasSize final
     {
         std::uint32_t width{};
@@ -137,6 +139,7 @@ namespace octopaint::application
         friend class SetLayerVisibilityCommand;
         friend class SetLayerAlphaLockedCommand;
         friend class SetLayerBlendModeCommand;
+        friend class PaintStrokeCommand;
     };
 
     class DocumentCommand
@@ -380,6 +383,112 @@ namespace octopaint::application
         std::optional<LayerId> active_layer_id;
     };
 
+    enum class PaintTool : std::uint8_t
+    {
+        Pencil,
+        Airbrush
+    };
+
+    struct PaintColorRgba8 final
+    {
+        std::uint8_t red{};
+        std::uint8_t green{};
+        std::uint8_t blue{};
+        std::uint8_t alpha{ 255 };
+
+        auto operator<=>(PaintColorRgba8 const&) const = default;
+    };
+
+    struct PaintBrushOptions final
+    {
+        float radius{ 8.0F };
+        float flow_per_second{ 1.0F };
+        float fixed_timestep_seconds{ 1.0F / 60.0F };
+        float hardness{ 1.0F };
+        float spacing{ 0.25F };
+        float opacity{ 1.0F };
+        bool pressure_affects_size{};
+        bool pressure_affects_opacity{ true };
+    };
+
+    struct PaintPressureOptions final
+    {
+        float minimum_input{};
+        float maximum_input{ 1.0F };
+        float gamma{ 1.0F };
+    };
+
+    struct PaintStabilizerOptions final
+    {
+        bool enabled{};
+        float strength{ 0.5F };
+    };
+
+    struct PaintPointerSample final
+    {
+        double x{};
+        double y{};
+        float pressure{ 1.0F };
+        // Time since the preceding sample. The first sample may use zero.
+        double elapsed_seconds{};
+    };
+
+    struct PaintStrokeRequest final
+    {
+        DocumentId document_id;
+        LayerId layer_id;
+        PaintTool tool{ PaintTool::Pencil };
+        PaintColorRgba8 color;
+        PaintBrushOptions brush;
+        PaintPressureOptions pressure;
+        PaintStabilizerOptions stabilizer;
+        std::vector<PaintPointerSample> samples;
+    };
+
+    enum class PaintStrokeStatus : std::uint8_t
+    {
+        Applied,
+        DocumentNotFound,
+        LayerNotFound,
+        LayerNotRaster,
+        LayerLocked,
+        InvalidRequest,
+        NoPixels
+    };
+
+    struct PixelBounds final
+    {
+        std::int32_t x{};
+        std::int32_t y{};
+        std::uint32_t width{};
+        std::uint32_t height{};
+
+        auto operator<=>(PixelBounds const&) const = default;
+    };
+
+    struct PaintStrokeResult final
+    {
+        PaintStrokeStatus status{ PaintStrokeStatus::InvalidRequest };
+        std::optional<PixelBounds> changed_bounds;
+
+        [[nodiscard]] constexpr explicit operator bool() const noexcept
+        {
+            return status == PaintStrokeStatus::Applied;
+        }
+    };
+
+    // A detached, tightly packed canvas-sized BGRA8 premultiplied snapshot of
+    // one raster layer. The revision lets a renderer reject stale frames.
+    struct RasterPixelSnapshot final
+    {
+        DocumentId document_id;
+        LayerId layer_id;
+        CanvasSize size;
+        std::uint64_t revision{};
+        std::size_t row_stride{};
+        std::vector<std::byte> pixels_bgra_premultiplied;
+    };
+
     class Workspace final
     {
     public:
@@ -410,6 +519,13 @@ namespace octopaint::application
         [[nodiscard]] bool Undo();
         [[nodiscard]] bool Redo();
         void MarkActiveDocumentSaved();
+
+        // Applies all samples as one document-history entry. A non-Applied
+        // result leaves both pixels and history unchanged.
+        [[nodiscard]] PaintStrokeResult ApplyPaintStroke(PaintStrokeRequest const& request);
+        [[nodiscard]] std::optional<RasterPixelSnapshot> SnapshotRasterLayerPixels(
+            DocumentId document_id,
+            LayerId layer_id) const;
 
         [[nodiscard]] WorkspaceSnapshot Snapshot() const;
 
