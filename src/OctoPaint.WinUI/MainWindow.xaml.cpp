@@ -50,6 +50,10 @@ namespace winrt::OctoPaint::WinUI::implementation
 
     MainWindow::~MainWindow()
     {
+        if (selection_animation_timer_)
+        {
+            selection_animation_timer_.Stop();
+        }
         dockable_panels_.Shutdown();
     }
 
@@ -57,6 +61,10 @@ namespace winrt::OctoPaint::WinUI::implementation
         [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
         [[maybe_unused]] Microsoft::UI::Xaml::WindowEventArgs const& event_args)
     {
+        if (selection_animation_timer_)
+        {
+            selection_animation_timer_.Stop();
+        }
         dockable_panels_.Shutdown();
     }
 
@@ -89,6 +97,20 @@ namespace winrt::OctoPaint::WinUI::implementation
             dockable_panels_registered_ = true;
         }
 
+        if (!selection_animation_timer_initialized_)
+        {
+            selection_animation_timer_ = Microsoft::UI::Xaml::DispatcherTimer{};
+            selection_animation_timer_.Interval(std::chrono::milliseconds(100));
+            selection_animation_timer_.Tick([weak_this = get_weak()](auto const&, auto const&)
+            {
+                if (auto const self = weak_this.get())
+                {
+                    self->AdvanceSelectionAnimation();
+                }
+            });
+            selection_animation_timer_initialized_ = true;
+        }
+
         canvas_renderer_.Attach(CanvasSwapChainPanel());
         RefreshColorSwatches();
         ProjectToolOptionsToControls();
@@ -108,10 +130,32 @@ namespace winrt::OctoPaint::WinUI::implementation
         }
     }
 
+    void MainWindow::SelectionCompleteAccelerator_Invoked(
+        [[maybe_unused]] Microsoft::UI::Xaml::Input::KeyboardAccelerator const& sender,
+        Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& event_args)
+    {
+        if (CompletePolygonSelection())
+        {
+            event_args.Handled(true);
+        }
+    }
+
+    void MainWindow::SelectionCancelAccelerator_Invoked(
+        [[maybe_unused]] Microsoft::UI::Xaml::Input::KeyboardAccelerator const& sender,
+        Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& event_args)
+    {
+        if (selection_gesture_active_ || !polygon_vertices_.empty())
+        {
+            CancelSelectionGesture(true);
+            event_args.Handled(true);
+        }
+    }
+
     void MainWindow::NewDocument_Click(
         [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
         [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
     {
+        CancelSelectionGesture(true);
         workspace_.NewDocument(
             std::format("Untitled {}", next_document_number_++),
             { .width = 1920, .height = 1080 });
@@ -262,6 +306,7 @@ namespace winrt::OctoPaint::WinUI::implementation
         auto const selected_index = DocumentTabs().SelectedIndex();
         if (selected_index >= 0 && static_cast<std::size_t>(selected_index) < tab_document_ids_.size())
         {
+            CancelSelectionGesture(true);
             if (workspace_.ActivateDocument(tab_document_ids_[static_cast<std::size_t>(selected_index)]))
             {
                 RefreshView();
@@ -276,6 +321,7 @@ namespace winrt::OctoPaint::WinUI::implementation
         std::uint32_t index{};
         if (sender.TabItems().IndexOf(event_args.Item(), index) && index < tab_document_ids_.size())
         {
+            CancelSelectionGesture(true);
             [[maybe_unused]] auto const closed = workspace_.CloseDocument(tab_document_ids_[index]);
             RefreshView();
         }
@@ -385,13 +431,21 @@ namespace winrt::OctoPaint::WinUI::implementation
         Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
     {
         UpdatePointerDevice(event_args);
-        if (paint_stroke_active_)
+        if (paint_stroke_active_ || selection_gesture_active_)
         {
             return;
         }
 
         auto const state = editor_state_.Snapshot();
         auto const tool = state.ActiveTool();
+        if (IsSelectionTool(tool))
+        {
+            if (BeginSelectionGesture(tool, event_args))
+            {
+                event_args.Handled(true);
+            }
+            return;
+        }
         if (tool != octopaint::application::EditorTool::Pencil &&
             tool != octopaint::application::EditorTool::Airbrush)
         {
@@ -471,6 +525,12 @@ namespace winrt::OctoPaint::WinUI::implementation
         Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
     {
         UpdatePointerDevice(event_args);
+        if (selection_gesture_active_ && event_args.Pointer().PointerId() == selection_pointer_id_)
+        {
+            UpdateSelectionGesture(event_args);
+            event_args.Handled(true);
+            return;
+        }
         if (!paint_stroke_active_ || event_args.Pointer().PointerId() != paint_pointer_id_)
         {
             return;
@@ -484,6 +544,12 @@ namespace winrt::OctoPaint::WinUI::implementation
         [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
         Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
     {
+        if (selection_gesture_active_ && event_args.Pointer().PointerId() == selection_pointer_id_)
+        {
+            CompleteSelectionGesture(event_args);
+            event_args.Handled(true);
+            return;
+        }
         if (!paint_stroke_active_ || event_args.Pointer().PointerId() != paint_pointer_id_)
         {
             return;
@@ -513,6 +579,12 @@ namespace winrt::OctoPaint::WinUI::implementation
         [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
         Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
     {
+        if (selection_gesture_active_ && event_args.Pointer().PointerId() == selection_pointer_id_)
+        {
+            CancelSelectionGesture(false);
+            event_args.Handled(true);
+            return;
+        }
         if (paint_stroke_active_ && event_args.Pointer().PointerId() == paint_pointer_id_)
         {
             paint_stroke_active_ = false;
@@ -539,6 +611,11 @@ namespace winrt::OctoPaint::WinUI::implementation
         [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
         Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
     {
+        if (selection_gesture_active_ && event_args.Pointer().PointerId() == selection_pointer_id_)
+        {
+            CancelSelectionGesture(false);
+            return;
+        }
         if (paint_stroke_active_ && event_args.Pointer().PointerId() == paint_pointer_id_)
         {
             paint_stroke_active_ = false;
@@ -634,6 +711,350 @@ namespace winrt::OctoPaint::WinUI::implementation
         }
     }
 
+    bool MainWindow::BeginSelectionGesture(
+        octopaint::application::EditorTool const tool,
+        Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
+    {
+        auto const pointer_point = event_args.GetCurrentPoint(CanvasInputSurface());
+        auto const properties = pointer_point.Properties();
+        if (!properties.IsLeftButtonPressed() && !pointer_point.IsInContact())
+        {
+            return false;
+        }
+
+        auto const document_point = TryMapSelectionPoint(pointer_point.Position());
+        auto const snapshot = workspace_.Snapshot();
+        if (!document_point || !snapshot.active_document_id)
+        {
+            return false;
+        }
+
+        if (tool != octopaint::application::EditorTool::PolygonalLasso)
+        {
+            polygon_vertices_.clear();
+            previous_polygon_click_.reset();
+        }
+
+        try
+        {
+            if (!CanvasInputSurface().CapturePointer(event_args.Pointer()))
+            {
+                return false;
+            }
+        }
+        catch (...)
+        {
+            return false;
+        }
+
+        selection_gesture_active_ = true;
+        selection_pointer_id_ = event_args.Pointer().PointerId();
+        selection_gesture_tool_ = tool;
+        selection_document_id_ = snapshot.active_document_id;
+        selection_anchor_ = *document_point;
+        selection_current_ = *document_point;
+        selection_path_.clear();
+        if (tool == octopaint::application::EditorTool::FreehandLasso)
+        {
+            selection_path_.push_back(*document_point);
+        }
+        return true;
+    }
+
+    void MainWindow::UpdateSelectionGesture(
+        Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
+    {
+        if (!selection_gesture_active_)
+        {
+            return;
+        }
+
+        if (selection_gesture_tool_ != octopaint::application::EditorTool::FreehandLasso)
+        {
+            auto const pointer_point = event_args.GetCurrentPoint(CanvasInputSurface());
+            if (auto const document_point = TryMapSelectionPoint(pointer_point.Position()))
+            {
+                selection_current_ = *document_point;
+            }
+            return;
+        }
+
+        std::vector<Microsoft::UI::Input::PointerPoint> pointer_points;
+        for (auto const& point : event_args.GetIntermediatePoints(CanvasInputSurface()))
+        {
+            pointer_points.push_back(point);
+        }
+        std::ranges::sort(pointer_points, [](auto const& left, auto const& right)
+        {
+            return left.Timestamp() < right.Timestamp();
+        });
+
+        for (auto const& point : pointer_points)
+        {
+            auto const document_point = TryMapSelectionPoint(point.Position());
+            if (!document_point)
+            {
+                continue;
+            }
+            selection_current_ = *document_point;
+            if (selection_path_.empty() || selection_path_.back() != *document_point)
+            {
+                selection_path_.push_back(*document_point);
+            }
+        }
+    }
+
+    void MainWindow::CompleteSelectionGesture(
+        Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
+    {
+        UpdateSelectionGesture(event_args);
+
+        auto const tool = selection_gesture_tool_;
+        auto const document_id = selection_document_id_;
+        auto const anchor = selection_anchor_;
+        auto const current = selection_current_;
+        selection_gesture_active_ = false;
+        selection_pointer_id_ = 0;
+        selection_document_id_.reset();
+
+        try
+        {
+            CanvasInputSurface().ReleasePointerCapture(event_args.Pointer());
+        }
+        catch (...)
+        {
+            try
+            {
+                CanvasInputSurface().ReleasePointerCaptures();
+            }
+            catch (...)
+            {
+            }
+        }
+
+        if (!document_id)
+        {
+            selection_path_.clear();
+            return;
+        }
+
+        if (tool == octopaint::application::EditorTool::PolygonalLasso)
+        {
+            constexpr std::int64_t FinishDistanceSquared = 16;
+            auto const distance_squared = [](auto const& left, auto const& right)
+            {
+                auto const dx = static_cast<std::int64_t>(left.x) - right.x;
+                auto const dy = static_cast<std::int64_t>(left.y) - right.y;
+                return dx * dx + dy * dy;
+            };
+            auto const now = std::chrono::steady_clock::now();
+            auto const closes_path = polygon_vertices_.size() >= 3 &&
+                distance_squared(current, polygon_vertices_.front()) <= FinishDistanceSquared;
+            auto const is_double_click = polygon_vertices_.size() >= 3 && previous_polygon_click_ &&
+                now - previous_polygon_click_time_ <= std::chrono::milliseconds(500) &&
+                distance_squared(current, *previous_polygon_click_) <= FinishDistanceSquared;
+
+            if (closes_path || is_double_click)
+            {
+                [[maybe_unused]] auto const completed = CompletePolygonSelection();
+                return;
+            }
+
+            if (polygon_vertices_.empty() || polygon_vertices_.back() != current)
+            {
+                polygon_vertices_.push_back(current);
+            }
+            previous_polygon_click_ = current;
+            previous_polygon_click_time_ = now;
+            return;
+        }
+
+        octopaint::application::SelectionGestureRequest request{
+            .document_id = *document_id
+        };
+        if (tool == octopaint::application::EditorTool::FreehandLasso)
+        {
+            request.kind = octopaint::application::SelectionGestureKind::Freehand;
+            request.points = std::move(selection_path_);
+        }
+        else
+        {
+            auto const left = (std::min)(anchor.x, current.x);
+            auto const top = (std::min)(anchor.y, current.y);
+            auto const width = static_cast<std::int64_t>((std::max)(anchor.x, current.x)) - left + 1;
+            auto const height = static_cast<std::int64_t>((std::max)(anchor.y, current.y)) - top + 1;
+            if (width > (std::numeric_limits<std::int32_t>::max)() ||
+                height > (std::numeric_limits<std::int32_t>::max)())
+            {
+                selection_path_.clear();
+                return;
+            }
+            request.kind = tool == octopaint::application::EditorTool::EllipticalMarquee
+                ? octopaint::application::SelectionGestureKind::Elliptical
+                : octopaint::application::SelectionGestureKind::Rectangular;
+            request.bounds = {
+                .x = left,
+                .y = top,
+                .width = static_cast<std::int32_t>(width),
+                .height = static_cast<std::int32_t>(height) };
+        }
+        [[maybe_unused]] auto const applied = ApplySelectionGesture(std::move(request));
+        selection_path_.clear();
+    }
+
+    void MainWindow::CancelSelectionGesture(bool const clear_polygon) noexcept
+    {
+        selection_gesture_active_ = false;
+        selection_pointer_id_ = 0;
+        selection_document_id_.reset();
+        selection_path_.clear();
+        if (clear_polygon)
+        {
+            polygon_vertices_.clear();
+            previous_polygon_click_.reset();
+            previous_polygon_click_time_ = {};
+        }
+        try
+        {
+            CanvasInputSurface().ReleasePointerCaptures();
+        }
+        catch (...)
+        {
+        }
+    }
+
+    bool MainWindow::CompletePolygonSelection()
+    {
+        if (selection_gesture_active_ || polygon_vertices_.size() < 3)
+        {
+            return false;
+        }
+
+        auto const snapshot = workspace_.Snapshot();
+        if (!snapshot.active_document_id)
+        {
+            CancelSelectionGesture(true);
+            return false;
+        }
+
+        auto request = octopaint::application::SelectionGestureRequest{
+            .document_id = *snapshot.active_document_id,
+            .kind = octopaint::application::SelectionGestureKind::Polygonal,
+            .points = std::move(polygon_vertices_) };
+        previous_polygon_click_.reset();
+        previous_polygon_click_time_ = {};
+        [[maybe_unused]] auto const applied = ApplySelectionGesture(std::move(request));
+        polygon_vertices_.clear();
+        return true;
+    }
+
+    bool MainWindow::ApplySelectionGesture(octopaint::application::SelectionGestureRequest request)
+    {
+        try
+        {
+            auto const result = workspace_.ApplySelectionGesture(request);
+            RefreshView();
+            return result.status == octopaint::application::SelectionStatus::Applied ||
+                result.status == octopaint::application::SelectionStatus::NoChange;
+        }
+        catch (...)
+        {
+            return false;
+        }
+    }
+
+    std::optional<octopaint::application::SelectionPoint> MainWindow::TryMapSelectionPoint(
+        Windows::Foundation::Point const& panel_point) const noexcept
+    {
+        auto const point = canvas_renderer_.TryMapPanelToDocument(panel_point.X, panel_point.Y);
+        if (!point || point->x > static_cast<std::uint32_t>((std::numeric_limits<std::int32_t>::max)()) ||
+            point->y > static_cast<std::uint32_t>((std::numeric_limits<std::int32_t>::max)()))
+        {
+            return std::nullopt;
+        }
+        return octopaint::application::SelectionPoint{
+            .x = static_cast<std::int32_t>(point->x),
+            .y = static_cast<std::int32_t>(point->y) };
+    }
+
+    void MainWindow::ProjectSelectionToRenderer(
+        octopaint::application::WorkspaceSnapshot const& snapshot)
+    {
+        if (!snapshot.active_document_id)
+        {
+            canvas_renderer_.ClearSelectionOutline();
+            SetSelectionAnimationActive(false);
+            return;
+        }
+
+        auto const boundary = workspace_.SnapshotSelectionBoundary(*snapshot.active_document_id);
+        if (!boundary || !boundary->has_selection || boundary->edges.empty())
+        {
+            canvas_renderer_.ClearSelectionOutline();
+            SetSelectionAnimationActive(false);
+            return;
+        }
+
+        std::vector<octopaint::winui::SelectionEdgeSegment> segments;
+        segments.reserve(boundary->edges.size());
+        for (auto const& edge : boundary->edges)
+        {
+            segments.push_back({
+                .x1 = static_cast<float>(edge.from.x),
+                .y1 = static_cast<float>(edge.from.y),
+                .x2 = static_cast<float>(edge.to.x),
+                .y2 = static_cast<float>(edge.to.y) });
+        }
+
+        try
+        {
+            canvas_renderer_.SetSelectionOutline(segments);
+            SetSelectionAnimationActive(true);
+        }
+        catch (...)
+        {
+            canvas_renderer_.ClearSelectionOutline();
+            SetSelectionAnimationActive(false);
+        }
+    }
+
+    void MainWindow::SetSelectionAnimationActive(bool const active)
+    {
+        selection_outline_visible_ = active;
+        if (!selection_animation_timer_initialized_ || !selection_animation_timer_)
+        {
+            return;
+        }
+        if (active)
+        {
+            selection_animation_timer_.Start();
+        }
+        else
+        {
+            selection_animation_timer_.Stop();
+            canvas_renderer_.SetSelectionAnimationPhase(0.0F);
+        }
+    }
+
+    void MainWindow::AdvanceSelectionAnimation()
+    {
+        if (!selection_outline_visible_)
+        {
+            SetSelectionAnimationActive(false);
+            return;
+        }
+        try
+        {
+            canvas_renderer_.AdvanceSelectionAnimationPhase(1.0F);
+            [[maybe_unused]] auto const rendered = canvas_renderer_.Render();
+        }
+        catch (...)
+        {
+            canvas_renderer_.ClearSelectionOutline();
+            SetSelectionAnimationActive(false);
+        }
+    }
+
     void MainWindow::ProjectToolOptionsToControls()
     {
         auto const state = editor_state_.Snapshot();
@@ -711,6 +1132,14 @@ namespace winrt::OctoPaint::WinUI::implementation
         return checked && checked.Value();
     }
 
+    bool MainWindow::IsSelectionTool(octopaint::application::EditorTool const tool) noexcept
+    {
+        return tool == octopaint::application::EditorTool::RectangularMarquee ||
+            tool == octopaint::application::EditorTool::EllipticalMarquee ||
+            tool == octopaint::application::EditorTool::FreehandLasso ||
+            tool == octopaint::application::EditorTool::PolygonalLasso;
+    }
+
     void MainWindow::RefreshView()
     {
         auto const snapshot = workspace_.Snapshot();
@@ -728,6 +1157,7 @@ namespace winrt::OctoPaint::WinUI::implementation
         if (!snapshot.active_document_id || !snapshot.active_layer_id)
         {
             canvas_renderer_.ClearDocument();
+            ProjectSelectionToRenderer(snapshot);
             [[maybe_unused]] auto const rendered = canvas_renderer_.Render();
             DocumentTitleText().Visibility(Microsoft::UI::Xaml::Visibility::Visible);
             return;
@@ -739,6 +1169,7 @@ namespace winrt::OctoPaint::WinUI::implementation
         if (!pixels)
         {
             canvas_renderer_.ClearDocument();
+            ProjectSelectionToRenderer(snapshot);
             [[maybe_unused]] auto const rendered = canvas_renderer_.Render();
             DocumentTitleText().Visibility(Microsoft::UI::Xaml::Visibility::Visible);
             return;
@@ -749,11 +1180,13 @@ namespace winrt::OctoPaint::WinUI::implementation
         {
             throw std::overflow_error("The raster snapshot stride exceeds the D3D canvas pitch range.");
         }
-        [[maybe_unused]] auto const rendered = canvas_renderer_.Render({
+        canvas_renderer_.SetDocument({
             .width = pixels->size.width,
             .height = pixels->size.height,
             .stride = static_cast<std::uint32_t>(pixels->row_stride),
             .premultiplied_bgra = pixels->pixels_bgra_premultiplied });
+        ProjectSelectionToRenderer(snapshot);
+        [[maybe_unused]] auto const rendered = canvas_renderer_.Render();
     }
 
     octopaint::application::EditorTool MainWindow::ToolFromName(hstring const& tool_name) noexcept
@@ -813,6 +1246,16 @@ namespace winrt::OctoPaint::WinUI::implementation
 
     void MainWindow::SelectTool(Microsoft::UI::Xaml::Controls::Primitives::ToggleButton const& selected_button)
     {
+        auto const selected_tool = ToolFromName(unbox_value<hstring>(selected_button.Tag()));
+        if (editor_state_.Snapshot().ActiveTool() != selected_tool)
+        {
+            if (paint_stroke_active_)
+            {
+                CompletePaintStroke(false);
+            }
+            CancelSelectionGesture(true);
+        }
+
         auto const buttons = std::array{
             PencilToolButton(),
             AirbrushToolButton(),
@@ -827,7 +1270,7 @@ namespace winrt::OctoPaint::WinUI::implementation
             button.IsChecked(button == selected_button);
         }
 
-        editor_state_.SetActiveTool(ToolFromName(unbox_value<hstring>(selected_button.Tag())));
+        editor_state_.SetActiveTool(selected_tool);
     }
 
     void MainWindow::BeginColorEdit(

@@ -10,6 +10,7 @@
 #include <array>
 #include <chrono>
 #include <optional>
+#include <vector>
 
 namespace winrt::OctoPaint::WinUI::implementation
 {
@@ -134,6 +135,14 @@ namespace winrt::OctoPaint::WinUI::implementation
             Windows::Foundation::IInspectable const& sender,
             Microsoft::UI::Xaml::RoutedEventArgs const& event_args);
 
+        void SelectionCompleteAccelerator_Invoked(
+            Microsoft::UI::Xaml::Input::KeyboardAccelerator const& sender,
+            Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& event_args);
+
+        void SelectionCancelAccelerator_Invoked(
+            Microsoft::UI::Xaml::Input::KeyboardAccelerator const& sender,
+            Microsoft::UI::Xaml::Input::KeyboardAcceleratorInvokedEventArgs const& event_args);
+
     private:
         struct HsvaColor final
         {
@@ -159,11 +168,25 @@ namespace winrt::OctoPaint::WinUI::implementation
         void UpdatePointerDevice(Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args);
         void AppendPointerSamples(Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args);
         void CompletePaintStroke(bool commit);
+        [[nodiscard]] bool BeginSelectionGesture(
+            octopaint::application::EditorTool tool,
+            Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args);
+        void UpdateSelectionGesture(Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args);
+        void CompleteSelectionGesture(Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args);
+        void CancelSelectionGesture(bool clear_polygon) noexcept;
+        [[nodiscard]] bool CompletePolygonSelection();
+        [[nodiscard]] bool ApplySelectionGesture(octopaint::application::SelectionGestureRequest request);
+        [[nodiscard]] std::optional<octopaint::application::SelectionPoint> TryMapSelectionPoint(
+            Windows::Foundation::Point const& panel_point) const noexcept;
+        void ProjectSelectionToRenderer(octopaint::application::WorkspaceSnapshot const& snapshot);
+        void SetSelectionAnimationActive(bool active);
+        void AdvanceSelectionAnimation();
         void RefreshCanvas(octopaint::application::WorkspaceSnapshot const& snapshot);
         void RefreshColorSwatches();
         [[nodiscard]] static octopaint::application::EditorTool ToolFromName(hstring const& tool_name) noexcept;
         [[nodiscard]] static hstring ToolName(octopaint::application::EditorTool tool);
         [[nodiscard]] static bool IsChecked(Microsoft::UI::Xaml::Controls::Primitives::ToggleButton const& toggle);
+        [[nodiscard]] static bool IsSelectionTool(octopaint::application::EditorTool tool) noexcept;
 
         void BeginColorEdit(
             bool foreground,
@@ -195,10 +218,24 @@ namespace winrt::OctoPaint::WinUI::implementation
         bool stylus_detected_{};
         bool paint_stroke_active_{};
         bool paint_segment_break_pending_{};
+        bool selection_gesture_active_{};
+        bool selection_outline_visible_{};
+        bool selection_animation_timer_initialized_{};
         bool dockable_panels_registered_{};
         std::uint32_t paint_pointer_id_{};
+        std::uint32_t selection_pointer_id_{};
         std::uint64_t previous_pointer_timestamp_{};
+        octopaint::application::EditorTool selection_gesture_tool_{
+            octopaint::application::EditorTool::RectangularMarquee };
+        octopaint::application::SelectionPoint selection_anchor_{};
+        octopaint::application::SelectionPoint selection_current_{};
+        std::vector<octopaint::application::SelectionPoint> selection_path_;
+        std::vector<octopaint::application::SelectionPoint> polygon_vertices_;
+        std::optional<octopaint::application::DocumentId> selection_document_id_;
+        std::optional<octopaint::application::SelectionPoint> previous_polygon_click_;
+        std::chrono::steady_clock::time_point previous_polygon_click_time_{};
         std::optional<octopaint::application::PaintStrokeRequest> active_paint_request_;
+        Microsoft::UI::Xaml::DispatcherTimer selection_animation_timer_{ nullptr };
         Microsoft::UI::Xaml::DispatcherTimer splash_timer_{ nullptr };
     };
 }

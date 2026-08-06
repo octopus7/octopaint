@@ -140,6 +140,11 @@
             </ContentDialog>
         </Grid.Resources>
 
+        <Grid.KeyboardAccelerators>
+            <KeyboardAccelerator Key="Enter" Invoked="SelectionCompleteAccelerator_Invoked" />
+            <KeyboardAccelerator Key="Escape" Invoked="SelectionCancelAccelerator_Invoked" />
+        </Grid.KeyboardAccelerators>
+
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />

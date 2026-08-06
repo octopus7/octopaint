@@ -90,6 +90,7 @@
 - [x] WinUI 도구·색상·Brush·압력·Stabilizer 컨트롤과 Application `EditorState` 양방향 연결
 - [x] 캔버스 포인터 캡처·스타일러스 압력 수집과 Pencil/Airbrush 스트로크 확정·재표시
 - [x] 캔버스 이탈·재진입 구간 단절, 입력 설정 고정 및 포인터 수명 안정화
+- [x] 사각형·타원·자유형·다각형 선택 제스처와 애니메이션 Marching Ants 표시 연결
 - [x] Tools/Layers 패널의 MainWindow 도킹·부유 창 분리·자동 재도킹
 - [x] 도킹 전환 중복 억제, 창 이벤트 수명 보호 및 실패 복구
 - [ ] 레이어 패널 표시 및 레이어 속성 컨트롤
