@@ -11,6 +11,7 @@
 namespace octopaint::application
 {
     class PaintStrokeCommand;
+    class SelectionCommand;
 
     struct CanvasSize final
     {
@@ -140,6 +141,7 @@ namespace octopaint::application
         friend class SetLayerAlphaLockedCommand;
         friend class SetLayerBlendModeCommand;
         friend class PaintStrokeCommand;
+        friend class SelectionCommand;
     };
 
     class DocumentCommand
@@ -492,6 +494,79 @@ namespace octopaint::application
         std::vector<std::byte> pixels_bgra_premultiplied;
     };
 
+    enum class SelectionGestureKind : std::uint8_t
+    {
+        Rectangular,
+        Elliptical,
+        Freehand,
+        Polygonal
+    };
+
+    struct SelectionPoint final
+    {
+        std::int32_t x{};
+        std::int32_t y{};
+
+        auto operator<=>(SelectionPoint const&) const = default;
+    };
+
+    struct SelectionRectangle final
+    {
+        std::int32_t x{};
+        std::int32_t y{};
+        std::int32_t width{};
+        std::int32_t height{};
+
+        auto operator<=>(SelectionRectangle const&) const = default;
+    };
+
+    struct SelectionGestureRequest final
+    {
+        DocumentId document_id;
+        SelectionGestureKind kind{ SelectionGestureKind::Rectangular };
+        // Rectangular and Elliptical gestures use bounds. Path gestures use
+        // points; the Core engine closes the path deterministically.
+        SelectionRectangle bounds;
+        std::vector<SelectionPoint> points;
+    };
+
+    enum class SelectionStatus : std::uint8_t
+    {
+        Applied,
+        DocumentNotFound,
+        InvalidRequest,
+        NoChange
+    };
+
+    struct SelectionResult final
+    {
+        SelectionStatus status{ SelectionStatus::InvalidRequest };
+
+        [[nodiscard]] constexpr explicit operator bool() const noexcept
+        {
+            return status == SelectionStatus::Applied;
+        }
+    };
+
+    // Coordinates lie on the pixel grid, so an edge around pixel (x, y) may
+    // run from (x, y) to (x + 1, y). Outside-canvas transitions are included.
+    struct SelectionBoundaryEdge final
+    {
+        SelectionPoint from;
+        SelectionPoint to;
+
+        auto operator<=>(SelectionBoundaryEdge const&) const = default;
+    };
+
+    struct SelectionBoundarySnapshot final
+    {
+        DocumentId document_id;
+        CanvasSize canvas_size;
+        std::uint64_t revision{};
+        bool has_selection{};
+        std::vector<SelectionBoundaryEdge> edges;
+    };
+
     class Workspace final
     {
     public:
@@ -529,6 +604,10 @@ namespace octopaint::application
         [[nodiscard]] std::optional<RasterPixelSnapshot> SnapshotRasterLayerPixels(
             DocumentId document_id,
             LayerId layer_id) const;
+        [[nodiscard]] SelectionResult ApplySelectionGesture(
+            SelectionGestureRequest const& request);
+        [[nodiscard]] std::optional<SelectionBoundarySnapshot> SnapshotSelectionBoundary(
+            DocumentId document_id) const;
 
         [[nodiscard]] WorkspaceSnapshot Snapshot() const;
 

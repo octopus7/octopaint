@@ -18,6 +18,7 @@ set "TOOLS_TEST_EXE=%SCRIPT_DIR%out\bin\x64\Release\OctoPaint.Tools.Tests\OctoPa
 set "APPLICATION_LAYER_TEST_EXE=%SCRIPT_DIR%out\bin\x64\Release\OctoPaint.Application.Layer.Tests\OctoPaint.Application.Layer.Tests.exe"
 set "APPLICATION_EDITOR_STATE_TEST_EXE=%SCRIPT_DIR%out\bin\x64\Release\OctoPaint.Application.EditorState.Tests\OctoPaint.Application.EditorState.Tests.exe"
 set "APPLICATION_PAINT_TEST_EXE=%SCRIPT_DIR%out\bin\x64\Release\OctoPaint.Application.Paint.Tests\OctoPaint.Application.Paint.Tests.exe"
+set "APPLICATION_SELECTION_TEST_EXE=%SCRIPT_DIR%out\bin\x64\Release\OctoPaint.Application.Selection.Tests\OctoPaint.Application.Selection.Tests.exe"
 set "RELEASE_DIR=%SCRIPT_DIR%out\release"
 set "STAGE_ROOT=%RELEASE_DIR%\stage"
 set "STAGE_APP=%STAGE_ROOT%\OctoPaint"
@@ -96,6 +97,9 @@ if errorlevel 1 (call :fail "OctoPaint.Application.EditorState.Tests failed." & 
 if not exist "%APPLICATION_PAINT_TEST_EXE%" (call :fail "Test executable was not produced: %APPLICATION_PAINT_TEST_EXE%" & exit /b 1)
 "%APPLICATION_PAINT_TEST_EXE%"
 if errorlevel 1 (call :fail "OctoPaint.Application.Paint.Tests failed." & exit /b 1)
+if not exist "%APPLICATION_SELECTION_TEST_EXE%" (call :fail "Test executable was not produced: %APPLICATION_SELECTION_TEST_EXE%" & exit /b 1)
+"%APPLICATION_SELECTION_TEST_EXE%"
+if errorlevel 1 (call :fail "OctoPaint.Application.Selection.Tests failed." & exit /b 1)
 
 echo [4/6] Staging runtime files...
 if not exist "%APP_OUTPUT%\OctoPaint.exe" (call :fail "Application executable was not produced: %APP_OUTPUT%\OctoPaint.exe" & exit /b 1)

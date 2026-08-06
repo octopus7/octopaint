@@ -58,6 +58,7 @@ namespace octopaint::application::detail
     {
         core::LayerTree tree;
         std::optional<LayerId> active_layer_id;
+        core::SelectionMask selection;
     };
 
     struct LayerLocation final
@@ -162,6 +163,14 @@ namespace octopaint::application::detail
         {
             throw std::invalid_argument(std::string{ core::LayerValidationMessage(result.code) });
         }
+    }
+
+    [[nodiscard]] bool SelectionMasksEqual(
+        core::SelectionMask const& left,
+        core::SelectionMask const& right) noexcept
+    {
+        return left.Bounds() == right.Bounds()
+            && std::ranges::equal(left.Coverage(), right.Coverage());
     }
 }
 
@@ -410,6 +419,46 @@ namespace octopaint::application
         std::optional<core::SparseTileStore> after_;
         std::optional<PixelBounds> changed_bounds_;
         bool changed_{};
+    };
+
+    class SelectionCommand final : public DocumentCommand
+    {
+    public:
+        explicit SelectionCommand(core::SelectionMask selection)
+            : selection_(std::move(selection))
+        {
+        }
+
+        [[nodiscard]] std::string Label() const override
+        {
+            return "Set selection";
+        }
+
+        void Execute(DocumentMutation& document) override
+        {
+            auto& state = *static_cast<detail::LayerDocumentState*>(document.layers_);
+            if (!captured_previous_)
+            {
+                previous_ = state.selection;
+                captured_previous_ = true;
+            }
+            state.selection = selection_;
+        }
+
+        void Undo(DocumentMutation& document) override
+        {
+            if (!captured_previous_)
+            {
+                throw std::logic_error("Cannot undo a selection that has not executed.");
+            }
+            auto& state = *static_cast<detail::LayerDocumentState*>(document.layers_);
+            state.selection = previous_;
+        }
+
+    private:
+        core::SelectionMask selection_;
+        core::SelectionMask previous_;
+        bool captured_previous_{};
     };
 
     struct Workspace::Impl final
@@ -1376,6 +1425,165 @@ namespace octopaint::application
                     snapshot.pixels_bgra_premultiplied[destination_index + 1] = source[source_index + 1];
                     snapshot.pixels_bgra_premultiplied[destination_index + 2] = source[source_index];
                     snapshot.pixels_bgra_premultiplied[destination_index + 3] = source[source_index + 3];
+                }
+            }
+        }
+        return snapshot;
+    }
+
+    SelectionResult Workspace::ApplySelectionGesture(SelectionGestureRequest const& request)
+    {
+        auto* const open_document = impl_->Find(request.document_id);
+        if (!open_document)
+        {
+            return { .status = SelectionStatus::DocumentNotFound };
+        }
+
+        try
+        {
+            auto const size = open_document->document.Size();
+            if (size.width > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max())
+                || size.height > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max()))
+            {
+                return { .status = SelectionStatus::InvalidRequest };
+            }
+            core::RectI const canvas{
+                0,
+                0,
+                static_cast<std::int32_t>(size.width),
+                static_cast<std::int32_t>(size.height)
+            };
+
+            core::SelectionMask selection;
+            switch (request.kind)
+            {
+            case SelectionGestureKind::Rectangular:
+                selection = core::RasterizeRectangularSelection(canvas, {
+                    request.bounds.x,
+                    request.bounds.y,
+                    request.bounds.width,
+                    request.bounds.height });
+                break;
+            case SelectionGestureKind::Elliptical:
+                selection = core::RasterizeEllipticalSelection(canvas, {
+                    request.bounds.x,
+                    request.bounds.y,
+                    request.bounds.width,
+                    request.bounds.height });
+                break;
+            case SelectionGestureKind::Freehand:
+            case SelectionGestureKind::Polygonal:
+            {
+                std::vector<core::PointI> points;
+                points.reserve(request.points.size());
+                for (auto const point : request.points)
+                {
+                    points.push_back({ point.x, point.y });
+                }
+                selection = request.kind == SelectionGestureKind::Freehand
+                    ? core::RasterizeFreehandSelection(canvas, points)
+                    : core::RasterizePolygonalSelection(canvas, points);
+                break;
+            }
+            default:
+                return { .status = SelectionStatus::InvalidRequest };
+            }
+
+            if (detail::SelectionMasksEqual(open_document->layers.selection, selection))
+            {
+                return { .status = SelectionStatus::NoChange };
+            }
+
+            open_document->history.reserve(open_document->history.size() + 1);
+            auto command = std::make_unique<SelectionCommand>(std::move(selection));
+            DocumentMutation mutation{ &open_document->document, &open_document->layers };
+            command->Execute(mutation);
+
+            if (open_document->history_position < open_document->history.size())
+            {
+                open_document->history.erase(
+                    open_document->history.begin()
+                        + static_cast<std::ptrdiff_t>(open_document->history_position),
+                    open_document->history.end());
+            }
+            auto const before_revision = open_document->current_revision;
+            auto const after_revision = open_document->next_revision++;
+            open_document->history.push_back({
+                .command = std::move(command),
+                .before_revision = before_revision,
+                .after_revision = after_revision
+            });
+            open_document->history_position = open_document->history.size();
+            open_document->current_revision = after_revision;
+            return { .status = SelectionStatus::Applied };
+        }
+        catch (std::invalid_argument const&)
+        {
+            return { .status = SelectionStatus::InvalidRequest };
+        }
+        catch (std::length_error const&)
+        {
+            return { .status = SelectionStatus::InvalidRequest };
+        }
+        catch (std::overflow_error const&)
+        {
+            return { .status = SelectionStatus::InvalidRequest };
+        }
+    }
+
+    std::optional<SelectionBoundarySnapshot> Workspace::SnapshotSelectionBoundary(
+        DocumentId const document_id) const
+    {
+        auto const* const open_document = impl_->Find(document_id);
+        if (!open_document)
+        {
+            return std::nullopt;
+        }
+
+        auto const size = open_document->document.Size();
+        SelectionBoundarySnapshot snapshot{
+            .document_id = document_id,
+            .canvas_size = { size.width, size.height },
+            .revision = open_document->current_revision
+        };
+        auto const& selection = open_document->layers.selection;
+        auto const bounds = selection.Bounds();
+        for (std::int64_t y = bounds.y;
+            y < static_cast<std::int64_t>(bounds.y) + bounds.height;
+            ++y)
+        {
+            for (std::int64_t x = bounds.x;
+                x < static_cast<std::int64_t>(bounds.x) + bounds.width;
+                ++x)
+            {
+                core::PointI const pixel{
+                    static_cast<std::int32_t>(x),
+                    static_cast<std::int32_t>(y)
+                };
+                if (selection.CoverageAt(pixel) == 0)
+                {
+                    continue;
+                }
+                snapshot.has_selection = true;
+                auto const left = pixel.x;
+                auto const top = pixel.y;
+                auto const right = static_cast<std::int32_t>(pixel.x + 1);
+                auto const bottom = static_cast<std::int32_t>(pixel.y + 1);
+                if (selection.CoverageAt({ pixel.x, static_cast<std::int32_t>(pixel.y - 1) }) == 0)
+                {
+                    snapshot.edges.push_back({ { left, top }, { right, top } });
+                }
+                if (selection.CoverageAt({ static_cast<std::int32_t>(pixel.x + 1), pixel.y }) == 0)
+                {
+                    snapshot.edges.push_back({ { right, top }, { right, bottom } });
+                }
+                if (selection.CoverageAt({ pixel.x, static_cast<std::int32_t>(pixel.y + 1) }) == 0)
+                {
+                    snapshot.edges.push_back({ { right, bottom }, { left, bottom } });
+                }
+                if (selection.CoverageAt({ static_cast<std::int32_t>(pixel.x - 1), pixel.y }) == 0)
+                {
+                    snapshot.edges.push_back({ { left, bottom }, { left, top } });
                 }
             }
         }

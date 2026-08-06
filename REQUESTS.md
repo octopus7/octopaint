@@ -678,3 +678,22 @@
 - 렌더러 배경만 흰색으로 바꾸지 않고 실제 문서 픽셀을 흰색으로 저장하여 편집, Alpha Lock 및 향후 파일 저장 결과가 화면과 일치하게 한다.
 - 흰색 초기화는 `Workspace::NewDocument`가 만드는 최초 레이어에만 적용하고 이후 추가 Raster Layer는 투명 상태를 유지한다.
 - 기존 문서 로딩과 문서 포맷 경로에는 이번 기본값 변경을 적용하지 않는다.
+
+---
+
+# 요청 시작: 2026-08-06 18:25:21 KST | 작업 완료: 2026-08-06 18:31:40 KST (소요 시간: 0시간 6분 19초)
+
+## 구현 내역
+
+- Rectangular, Elliptical, Freehand 및 Polygonal 선택 제스처를 Application에 적용하는 UI 중립 요청 API를 추가했다.
+- 문서별 선택 마스크를 보관하고 선택 제스처 한 번을 하나의 Undo/Redo 이력 항목으로 처리했다.
+- 선택 픽셀과 비선택 픽셀 사이의 pixel-grid 경계와 캔버스 외곽 경계를 분리된 snapshot으로 제공했다.
+- 잘못된 요청과 동일 선택 재적용은 revision과 history를 변경하지 않도록 처리했다.
+- 다중 문서 선택 격리, 네 방향 캔버스 경계, 각 선택 도형과 Undo/Redo를 검증하는 전용 Debug/Release 테스트를 추가했다.
+- 새 테스트 프로젝트를 솔루션과 Release 빌드 테스트 게이트에 등록했다.
+
+## 결정 내용
+
+- 선택 상태는 Raster Layer 픽셀이 아니라 문서별 Application 상태로 보관한다.
+- Marching Ants 렌더러에는 전체 coverage bitmap 대신 선택/비선택 전이 edge만 전달하여 UI와 D3D 의존성을 Application에서 배제한다.
+- 선택 마스크 변경은 이미지 픽셀을 바꾸지 않지만 문서 편집 이력에는 포함한다.
