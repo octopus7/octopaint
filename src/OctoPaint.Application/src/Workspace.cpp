@@ -66,6 +66,29 @@ namespace octopaint::application::detail
         std::size_t index{};
     };
 
+    [[nodiscard]] core::SparseTileStore MakeOpaqueWhiteCanvasTiles(CanvasSize const size)
+    {
+        std::vector<std::byte> white_bytes(
+            core::Rgba8TileByteCount,
+            static_cast<std::byte>(0xff));
+        auto const white_tile = core::TilePayload::FromRgba8(white_bytes);
+
+        core::SparseTileStore tiles;
+        auto const columns = (size.width - 1) / core::TileExtent + 1;
+        auto const rows = (size.height - 1) / core::TileExtent + 1;
+        for (std::uint32_t y = 0; y < rows; ++y)
+        {
+            for (std::uint32_t x = 0; x < columns; ++x)
+            {
+                [[maybe_unused]] auto const result = tiles.Publish({
+                    static_cast<std::int32_t>(x),
+                    static_cast<std::int32_t>(y),
+                    0 }, white_tile);
+            }
+        }
+        return tiles;
+    }
+
     [[nodiscard]] core::LayerId ToCore(LayerId const id) noexcept
     {
         return core::LayerId{ id.Value() };
@@ -994,7 +1017,8 @@ namespace octopaint::application
             core::LayerProperties{
                 .id = detail::ToCore(default_layer_id),
                 .name_utf8 = "Layer 1"
-            })));
+            },
+            detail::MakeOpaqueWhiteCanvasTiles(size))));
         layers.active_layer_id = default_layer_id;
         impl_->documents.push_back({
             .id = id,

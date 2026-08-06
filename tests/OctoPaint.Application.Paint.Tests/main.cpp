@@ -73,8 +73,18 @@ int main()
         Require(initial->size == CanvasSize{ 8, 8 } && initial->row_stride == 32,
             "The render snapshot must be tightly packed and canvas sized.");
         Require(initial->revision == 0 && initial->pixels_bgra_premultiplied.size() == 256,
-            "The initial snapshot must be transparent and revision zero.");
-        Require(ByteAt(*initial, 1, 1, 3) == 0, "A new raster layer must be transparent.");
+            "The initial snapshot must be canvas sized and revision zero.");
+        for (std::uint32_t y = 0; y < initial->size.height; ++y)
+        {
+            for (std::uint32_t x = 0; x < initial->size.width; ++x)
+            {
+                Require(ByteAt(*initial, x, y, 0) == 255
+                    && ByteAt(*initial, x, y, 1) == 255
+                    && ByteAt(*initial, x, y, 2) == 255
+                    && ByteAt(*initial, x, y, 3) == 255,
+                    "Every pixel in a new document's initial layer must be opaque white.");
+            }
+        }
 
         auto const red_line = Pencil(document, layer, { 255, 0, 0, 255 }, {
             { 1.0, 1.0, 1.0F, 0.0 },
@@ -101,7 +111,11 @@ int main()
 
         Require(workspace.Undo(document), "A paint stroke must be undoable atomically.");
         auto undone = workspace.SnapshotRasterLayerPixels(document, layer);
-        Require(undone && undone->revision == 0 && ByteAt(*undone, 2, 1, 3) == 0,
+        Require(undone && undone->revision == 0
+            && ByteAt(*undone, 2, 1, 0) == 255
+            && ByteAt(*undone, 2, 1, 1) == 255
+            && ByteAt(*undone, 2, 1, 2) == 255
+            && ByteAt(*undone, 2, 1, 3) == 255,
             "Undo must restore the exact pre-stroke pixels and revision.");
         Require(workspace.Redo(document), "A paint stroke must be redoable atomically.");
         auto redone = workspace.SnapshotRasterLayerPixels(document, layer);
@@ -111,7 +125,7 @@ int main()
         Workspace segmented_workspace;
         auto const segmented_document = segmented_workspace.NewDocument("Segments", { 10, 3 });
         auto const segmented_layer = ActiveLayer(segmented_workspace);
-        auto segmented = Pencil(segmented_document, segmented_layer, { 255, 255, 255, 255 }, {
+        auto segmented = Pencil(segmented_document, segmented_layer, { 0, 0, 0, 255 }, {
             { 1.0, 1.0, 1.0F, 0.0, false },
             { 2.0, 1.0, 1.0F, 0.01, false },
             { 7.0, 1.0, 1.0F, 0.0, true },
@@ -124,14 +138,14 @@ int main()
         auto segmented_pixels = segmented_workspace.SnapshotRasterLayerPixels(
             segmented_document, segmented_layer);
         Require(segmented_pixels
-            && ByteAt(*segmented_pixels, 1, 1, 3) == 255
-            && ByteAt(*segmented_pixels, 2, 1, 3) == 255
-            && ByteAt(*segmented_pixels, 7, 1, 3) == 255
-            && ByteAt(*segmented_pixels, 8, 1, 3) == 255,
+            && ByteAt(*segmented_pixels, 1, 1, 0) == 0
+            && ByteAt(*segmented_pixels, 2, 1, 0) == 0
+            && ByteAt(*segmented_pixels, 7, 1, 0) == 0
+            && ByteAt(*segmented_pixels, 8, 1, 0) == 0,
             "Each disconnected segment must paint its own endpoints.");
         for (std::uint32_t x = 3; x <= 6; ++x)
         {
-            Require(ByteAt(*segmented_pixels, x, 1, 3) == 0,
+            Require(ByteAt(*segmented_pixels, x, 1, 0) == 255,
                 "A segment break must not draw a chord across the skipped pointer region.");
         }
         Require(segmented_workspace.Snapshot().active_commands.undo_label == "Pencil stroke"
@@ -139,19 +153,21 @@ int main()
             "All disconnected segments must share one undo entry.");
         auto segmented_undone = segmented_workspace.SnapshotRasterLayerPixels(
             segmented_document, segmented_layer);
-        Require(segmented_undone && ByteAt(*segmented_undone, 1, 1, 3) == 0
-            && ByteAt(*segmented_undone, 8, 1, 3) == 0,
+        Require(segmented_undone && ByteAt(*segmented_undone, 1, 1, 0) == 255
+            && ByteAt(*segmented_undone, 8, 1, 0) == 255,
             "One undo must remove every segment in the request.");
 
         // Detached snapshots must not expose mutable workspace storage.
         redone->pixels_bgra_premultiplied[0] = std::byte{ 0x7f };
         auto detached_check = workspace.SnapshotRasterLayerPixels(document, layer);
-        Require(detached_check && ByteAt(*detached_check, 0, 0, 0) == 0,
+        Require(detached_check && ByteAt(*detached_check, 0, 0, 0) == 255,
             "Changing a returned snapshot must not mutate the document.");
 
         Workspace alpha_workspace;
         auto const alpha_document = alpha_workspace.NewDocument("Alpha", { 4, 4 });
-        auto const alpha_layer = ActiveLayer(alpha_workspace);
+        auto add_transparent_layer = std::make_unique<AddRasterLayerCommand>("Transparent");
+        auto const alpha_layer = add_transparent_layer->CreatedLayerId();
+        alpha_workspace.ExecuteCommand(alpha_document, std::move(add_transparent_layer));
         alpha_workspace.ExecuteCommand(alpha_document,
             std::make_unique<SetLayerAlphaLockedCommand>(alpha_layer, true));
         auto const before_empty_locked = alpha_workspace.Snapshot();
@@ -205,16 +221,16 @@ int main()
             "A valid airbrush stroke must use the Core dab engine.");
         auto airbrush_pixels = airbrush_workspace.SnapshotRasterLayerPixels(airbrush_document, airbrush_layer);
         Require(airbrush_pixels
-            && ByteAt(*airbrush_pixels, 3, 8, 1) > 0
-            && ByteAt(*airbrush_pixels, 12, 8, 1) > 0
-            && ByteAt(*airbrush_pixels, 8, 8, 3) == 0,
+            && ByteAt(*airbrush_pixels, 3, 8, 2) < 255
+            && ByteAt(*airbrush_pixels, 12, 8, 2) < 255
+            && ByteAt(*airbrush_pixels, 8, 8, 2) == 255,
             "Airbrush segment breaks must restart dabs without painting a connecting chord.");
         Require(airbrush_workspace.Undo(airbrush_document),
             "Disconnected airbrush segments must remain one undo entry.");
         airbrush_pixels = airbrush_workspace.SnapshotRasterLayerPixels(airbrush_document, airbrush_layer);
         Require(airbrush_pixels
-            && ByteAt(*airbrush_pixels, 3, 8, 3) == 0
-            && ByteAt(*airbrush_pixels, 12, 8, 3) == 0,
+            && ByteAt(*airbrush_pixels, 3, 8, 2) == 255
+            && ByteAt(*airbrush_pixels, 12, 8, 2) == 255,
             "One undo must remove all disconnected airbrush segments.");
 
         std::cout << "OctoPaint application paint tests passed.\n";

@@ -660,3 +660,21 @@
 - DXGI adapter와 factory는 서로 QueryInterface 관계가 아니므로 부모 객체 조회 API를 사용한다.
 - `IDXGISwapChain2`의 선택적 프레임 지연 기능은 지원되지 않는 Windows/DXGI 조합에서 앱 시작을 중단시키지 않도록 필수 경로에서 제외한다.
 - SwapChainPanel 네이티브 인터페이스를 제공하지 않는 환경에서는 프로세스를 종료시키지 않고 렌더 연결만 건너뛴다.
+
+---
+
+# 요청 시작: 2026-08-06 17:39:45 KST | 작업 완료: 2026-08-06 17:42:39 KST (소요 시간: 0시간 2분 54초)
+
+## 구현 내역
+
+- 새 문서의 최초 기본 Raster Layer 전체를 premultiplied RGBA8 불투명 흰색 `(255, 255, 255, 255)` 타일로 초기화했다.
+- 하나의 immutable 흰색 TilePayload를 전체 타일 항목이 공유하고, 실제 페인팅이 발생한 타일만 Copy-on-Write draft로 분리되도록 구성했다.
+- 새 문서 Raster snapshot의 모든 픽셀이 불투명 흰색인지 전체 순회하는 테스트를 추가했다.
+- 흰색 초기 상태에 맞게 Pencil, Airbrush, 구간 단절, Undo 및 detached snapshot 테스트 기대값을 갱신했다.
+- 투명도 잠금 테스트는 새로 추가한 투명 Raster Layer에서 수행하여 추가 레이어의 투명 기본값을 계속 검증했다.
+
+## 결정 내용
+
+- 렌더러 배경만 흰색으로 바꾸지 않고 실제 문서 픽셀을 흰색으로 저장하여 편집, Alpha Lock 및 향후 파일 저장 결과가 화면과 일치하게 한다.
+- 흰색 초기화는 `Workspace::NewDocument`가 만드는 최초 레이어에만 적용하고 이후 추가 Raster Layer는 투명 상태를 유지한다.
+- 기존 문서 로딩과 문서 포맷 경로에는 이번 기본값 변경을 적용하지 않는다.
