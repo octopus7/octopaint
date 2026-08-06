@@ -642,3 +642,21 @@
 - MainWindow는 직접 Toggle을 큐에 넣지 않고 컨트롤러의 `RequestToggle`에 요청하여 전환 직렬화와 수명 정책을 한곳에서 관리한다.
 - 내부 Window Close와 사용자 Close를 구분하여 내부 정리 중 Closing/Closed 재진입이 상태를 다시 변경하지 않게 한다.
 - 종료 경로에서는 일부 WinUI 호출이 실패해도 남은 이벤트와 창 정리를 계속 수행하는 것을 우선한다.
+
+---
+
+# 요청 시작: 2026-08-06 17:25:36 KST | 작업 완료: 2026-08-06 17:36:48 KST (소요 시간: 0시간 11분 12초)
+
+## 구현 내역
+
+- Debug 실행 파일의 즉시 종료를 재현하고 종료 코드 `0xC000027B`, Windows Error Reporting 내부 HRESULT `0x80004002 (E_NOINTERFACE)`를 확인했다.
+- `IDXGIAdapter`에서 factory를 QueryInterface로 요청하던 코드를 `IDXGIAdapter::GetParent` 기반 `IDXGIFactory2` 취득으로 수정했다.
+- 필수 렌더링 경로가 아닌 `IDXGISwapChain2` 변환과 `SetMaximumFrameLatency` 호출을 제거하고 기본 `IDXGISwapChain1`을 유지하도록 변경했다.
+- WinUI 버전에 따라 `ISwapChainPanelNative2` 또는 `ISwapChainPanelNative`를 선택하도록 SwapChainPanel 네이티브 연결 경로를 보강했다.
+- 전체 Debug x64 빌드와 7개 headless 테스트를 통과시키고, 수정된 실행 파일이 5초 이상 생존하는 것을 직접 확인했다.
+
+## 결정 내용
+
+- DXGI adapter와 factory는 서로 QueryInterface 관계가 아니므로 부모 객체 조회 API를 사용한다.
+- `IDXGISwapChain2`의 선택적 프레임 지연 기능은 지원되지 않는 Windows/DXGI 조합에서 앱 시작을 중단시키지 않도록 필수 경로에서 제외한다.
+- SwapChainPanel 네이티브 인터페이스를 제공하지 않는 환경에서는 프로세스를 종료시키지 않고 렌더 연결만 건너뛴다.

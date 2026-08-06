@@ -320,7 +320,8 @@ namespace octopaint::winui
                 auto const dxgi_device = d3d_device_.as<IDXGIDevice>();
                 winrt::com_ptr<IDXGIAdapter> adapter;
                 winrt::check_hresult(dxgi_device->GetAdapter(adapter.put()));
-                auto const factory = adapter.as<IDXGIFactory2>();
+                winrt::com_ptr<IDXGIFactory2> factory;
+                winrt::check_hresult(adapter->GetParent(IID_PPV_ARGS(factory.put())));
 
                 DXGI_SWAP_CHAIN_DESC1 description{};
                 description.Width = pixel_width_;
@@ -339,11 +340,21 @@ namespace octopaint::winui
                     &description,
                     nullptr,
                     swap_chain.put()));
-                swap_chain_ = swap_chain.as<IDXGISwapChain2>();
-                winrt::check_hresult(swap_chain_->SetMaximumFrameLatency(1));
+                swap_chain_ = swap_chain;
 
-                auto const panel_native = panel_.as<ISwapChainPanelNative>();
-                winrt::check_hresult(panel_native->SetSwapChain(swap_chain_.get()));
+                if (auto const panel_native2 = panel_.try_as<ISwapChainPanelNative2>())
+                {
+                    winrt::check_hresult(panel_native2->SetSwapChain(swap_chain_.get()));
+                }
+                else if (auto const panel_native = panel_.try_as<ISwapChainPanelNative>())
+                {
+                    winrt::check_hresult(panel_native->SetSwapChain(swap_chain_.get()));
+                }
+                else
+                {
+                    swap_chain_ = nullptr;
+                    return;
+                }
             }
 
             CreateTargetBitmap();
@@ -461,7 +472,7 @@ namespace octopaint::winui
         winrt::com_ptr<ID2D1Factory1> d2d_factory_;
         winrt::com_ptr<ID2D1Device> d2d_device_;
         winrt::com_ptr<ID2D1DeviceContext> d2d_context_;
-        winrt::com_ptr<IDXGISwapChain2> swap_chain_;
+        winrt::com_ptr<IDXGISwapChain1> swap_chain_;
         winrt::com_ptr<ID2D1Bitmap1> target_bitmap_;
         winrt::com_ptr<ID2D1Bitmap1> document_bitmap_;
         winrt::com_ptr<ID2D1SolidColorBrush> checker_light_;
