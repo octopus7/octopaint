@@ -64,6 +64,7 @@
   <ItemGroup>
     <ClInclude Include="pch.h" />
     <ClInclude Include="App.xaml.h"><DependentUpon>App.xaml</DependentUpon></ClInclude>
+    <ClInclude Include="D3DCanvasRenderer.h" />
     <ClInclude Include="MainWindow.xaml.h"><DependentUpon>MainWindow.xaml</DependentUpon></ClInclude>
     <ClInclude Include="resource.h" />
     <ClInclude Include="ToolOptionsState.h" />
@@ -75,6 +76,7 @@
   <ItemGroup>
     <ClCompile Include="pch.cpp"><PrecompiledHeader>Create</PrecompiledHeader></ClCompile>
     <ClCompile Include="App.xaml.cpp"><DependentUpon>App.xaml</DependentUpon></ClCompile>
+    <ClCompile Include="D3DCanvasRenderer.cpp" />
     <ClCompile Include="MainWindow.xaml.cpp"><DependentUpon>MainWindow.xaml</DependentUpon></ClCompile>
     <ClCompile Include="$(GeneratedFilesDir)module.g.cpp" />
   </ItemGroup>

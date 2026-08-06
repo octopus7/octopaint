@@ -91,7 +91,8 @@
 
 ## 렌더링 및 이미지 작업
 
-- [ ] CPU 정확성 폴백을 포함한 Direct3D 캔버스 렌더러
+- [x] SwapChainPanel 기반 Direct3D 11/Direct2D 캔버스 렌더러와 WARP 폴백
+- [ ] CPU 정확성 참조 합성 경로 및 Direct3D 결과 일치 검증
 - [ ] 블렌딩 모드 합성기
 - [ ] 명도/대비 조정
 - [ ] 색조/채도 및 색상 조정
