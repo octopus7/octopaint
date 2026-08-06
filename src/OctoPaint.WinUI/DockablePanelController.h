@@ -6,6 +6,7 @@
 
 #include <winrt/Microsoft.UI.Xaml.h>
 #include <winrt/Microsoft.UI.Xaml.Controls.h>
+#include <winrt/Microsoft.UI.Dispatching.h>
 
 namespace octopaint::winui
 {
@@ -35,9 +36,12 @@ namespace octopaint::winui
         DockablePanelController& operator=(DockablePanelController const&) = delete;
 
         void Register(DockablePanelDescriptor descriptor);
-        void Toggle(winrt::hstring const& id);
-        void Float(winrt::hstring const& id);
-        void Dock(winrt::hstring const& id);
+        void RequestToggle(
+            winrt::hstring const& id,
+            winrt::Microsoft::UI::Dispatching::DispatcherQueue const& dispatcher) noexcept;
+        void Toggle(winrt::hstring const& id) noexcept;
+        void Float(winrt::hstring const& id) noexcept;
+        void Dock(winrt::hstring const& id) noexcept;
         void Shutdown() noexcept;
 
         [[nodiscard]] bool IsFloating(winrt::hstring const& id) const noexcept;
@@ -49,6 +53,8 @@ namespace octopaint::winui
             winrt::Microsoft::UI::Xaml::Window floating_window{ nullptr };
             winrt::event_token closed_token{};
             winrt::event_token app_closing_token{};
+            bool transition_pending{};
+            bool closing_internally{};
         };
 
         [[nodiscard]] Entry* Find(winrt::hstring const& id) noexcept;
@@ -56,7 +62,12 @@ namespace octopaint::winui
         void RestoreDockedContent(Entry& entry);
         void FloatingWindowClosed(
             winrt::hstring const& id,
-            winrt::Microsoft::UI::Xaml::Window const& window);
+            winrt::Microsoft::UI::Xaml::Window const& window) noexcept;
+        void SetFloatingButton(Entry& entry) noexcept;
+        void SetDockedButton(Entry& entry) noexcept;
+        [[nodiscard]] bool RestoreFloatingContent(
+            Entry& entry,
+            winrt::Microsoft::UI::Xaml::Window const& window) noexcept;
 
         std::vector<Entry> entries_;
         std::shared_ptr<int> lifetime_token_{ std::make_shared<int>(0) };

@@ -104,15 +104,7 @@ namespace winrt::OctoPaint::WinUI::implementation
         {
             CloseColorEditorBeforeExternalChange();
             auto const panel_id = unbox_value<hstring>(tag);
-            auto const weak_this = get_weak();
-            [[maybe_unused]] auto const enqueued = DispatcherQueue().TryEnqueue(
-                [weak_this, panel_id]
-                {
-                    if (auto const self = weak_this.get())
-                    {
-                        self->dockable_panels_.Toggle(panel_id);
-                    }
-                });
+            dockable_panels_.RequestToggle(panel_id, DispatcherQueue());
         }
     }
 
