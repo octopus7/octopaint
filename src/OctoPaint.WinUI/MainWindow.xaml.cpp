@@ -47,14 +47,72 @@ namespace winrt::OctoPaint::WinUI::implementation
         }
     }
 
+    MainWindow::~MainWindow()
+    {
+        dockable_panels_.Shutdown();
+    }
+
+    void MainWindow::MainWindow_Closed(
+        [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
+        [[maybe_unused]] Microsoft::UI::Xaml::WindowEventArgs const& event_args)
+    {
+        dockable_panels_.Shutdown();
+    }
+
     void MainWindow::RootGrid_Loaded(
         [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
         [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
     {
+        if (!dockable_panels_registered_)
+        {
+            dockable_panels_.Register({
+                .id = L"tools",
+                .title = L"Tools",
+                .panel = ToolsPanel(),
+                .dock_host = ToolsDockHost(),
+                .toggle_button = ToolsDockToggleButton(),
+                .dock_column = ToolsColumn(),
+                .docked_width = 88.0,
+                .floating_width = 180,
+                .floating_height = 720 });
+            dockable_panels_.Register({
+                .id = L"layers",
+                .title = L"Layers",
+                .panel = LayersPanel(),
+                .dock_host = LayersDockHost(),
+                .toggle_button = LayersDockToggleButton(),
+                .dock_column = LayersColumn(),
+                .docked_width = 260.0,
+                .floating_width = 320,
+                .floating_height = 720 });
+            dockable_panels_registered_ = true;
+        }
+
         canvas_renderer_.Attach(CanvasSwapChainPanel());
         RefreshColorSwatches();
         ProjectToolOptionsToControls();
         RefreshView();
+    }
+
+    void MainWindow::DockPanelToggle_Click(
+        Windows::Foundation::IInspectable const& sender,
+        [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
+    {
+        auto const button = sender.as<Microsoft::UI::Xaml::Controls::Button>();
+        if (auto const tag = button.Tag())
+        {
+            CloseColorEditorBeforeExternalChange();
+            auto const panel_id = unbox_value<hstring>(tag);
+            auto const weak_this = get_weak();
+            [[maybe_unused]] auto const enqueued = DispatcherQueue().TryEnqueue(
+                [weak_this, panel_id]
+                {
+                    if (auto const self = weak_this.get())
+                    {
+                        self->dockable_panels_.Toggle(panel_id);
+                    }
+                });
+        }
     }
 
     void MainWindow::NewDocument_Click(

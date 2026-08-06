@@ -87,6 +87,7 @@
 - [x] RGB 및 16진수 값과 동기화되는 HSV/알파 색상 선택기
 - [x] WinUI 도구·색상·Brush·압력·Stabilizer 컨트롤과 Application `EditorState` 양방향 연결
 - [x] 캔버스 포인터 캡처·스타일러스 압력 수집과 Pencil/Airbrush 스트로크 확정·재표시
+- [x] Tools/Layers 패널의 MainWindow 도킹·부유 창 분리·자동 재도킹
 - [ ] 레이어 패널 표시 및 레이어 속성 컨트롤
 - [ ] 캔버스 뷰포트, 확대/축소, 이동, 눈금자 및 안내선
 

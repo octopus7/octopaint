@@ -2,6 +2,7 @@
 
 #include "MainWindow.g.h"
 #include "D3DCanvasRenderer.h"
+#include "DockablePanelController.h"
 
 #include <octopaint/application/EditorState.h>
 #include <octopaint/application/Workspace.h>
@@ -14,10 +15,15 @@ namespace winrt::OctoPaint::WinUI::implementation
     struct MainWindow : MainWindowT<MainWindow>
     {
         MainWindow();
+        ~MainWindow();
 
         void RootGrid_Loaded(
             Windows::Foundation::IInspectable const& sender,
             Microsoft::UI::Xaml::RoutedEventArgs const& event_args);
+
+        void MainWindow_Closed(
+            Windows::Foundation::IInspectable const& sender,
+            Microsoft::UI::Xaml::WindowEventArgs const& event_args);
 
         void NewDocument_Click(
             Windows::Foundation::IInspectable const& sender,
@@ -123,6 +129,10 @@ namespace winrt::OctoPaint::WinUI::implementation
             Windows::Foundation::IInspectable const& sender,
             Microsoft::UI::Xaml::SizeChangedEventArgs const& event_args);
 
+        void DockPanelToggle_Click(
+            Windows::Foundation::IInspectable const& sender,
+            Microsoft::UI::Xaml::RoutedEventArgs const& event_args);
+
     private:
         struct HsvaColor final
         {
@@ -170,6 +180,7 @@ namespace winrt::OctoPaint::WinUI::implementation
         octopaint::application::Workspace workspace_;
         octopaint::application::EditorState editor_state_;
         octopaint::winui::D3DCanvasRenderer canvas_renderer_;
+        octopaint::winui::DockablePanelController dockable_panels_;
         std::uint32_t next_document_number_{ 1 };
         std::vector<octopaint::application::DocumentId> tab_document_ids_;
 
@@ -182,6 +193,7 @@ namespace winrt::OctoPaint::WinUI::implementation
         bool suppress_tool_option_events_{};
         bool stylus_detected_{};
         bool paint_stroke_active_{};
+        bool dockable_panels_registered_{};
         std::uint32_t paint_pointer_id_{};
         std::uint64_t previous_pointer_timestamp_{};
         octopaint::application::DocumentId paint_document_id_;

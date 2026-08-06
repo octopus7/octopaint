@@ -6,6 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
+    Closed="MainWindow_Closed"
     Title="OctoPaint">
 
     <Grid x:Name="RootGrid" Loaded="RootGrid_Loaded" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
@@ -226,20 +227,37 @@
 
         <Grid Grid.Row="3" ColumnSpacing="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="88" />
+                <ColumnDefinition x:Name="ToolsColumn" Width="88" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="260" />
+                <ColumnDefinition x:Name="LayersColumn" Width="260" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Padding="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                <Grid>
+            <ContentControl x:Name="ToolsDockHost" Grid.Column="0">
+                <Border x:Name="ToolsPanel" Padding="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <TextBlock Text="Tools" HorizontalAlignment="Center" Style="{ThemeResource CaptionTextBlockStyle}" />
+                    <Grid ColumnSpacing="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Tools" VerticalAlignment="Center" HorizontalAlignment="Center" Style="{ThemeResource CaptionTextBlockStyle}" />
+                        <Button
+                            x:Name="ToolsDockToggleButton"
+                            Grid.Column="1"
+                            Tag="tools"
+                            Content="Float"
+                            Padding="5,2"
+                            FontSize="10"
+                            Click="DockPanelToggle_Click"
+                            ToolTipService.ToolTip="Float or dock the Tools panel"
+                            AutomationProperties.Name="Float Tools panel" />
+                    </Grid>
 
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Margin="0,6,0,8" Spacing="1">
@@ -281,8 +299,9 @@
                             <Button Width="30" Height="28" Padding="2" Content="◩" Click="ResetColors_Click" ToolTipService.ToolTip="Reset colors to black and white" AutomationProperties.Name="Reset foreground and background colors" />
                         </StackPanel>
                     </StackPanel>
-                </Grid>
-            </Border>
+                    </Grid>
+                </Border>
+            </ContentControl>
 
             <Grid Grid.Column="1">
                 <Grid.RowDefinitions>
@@ -321,12 +340,28 @@
                 </Border>
             </Grid>
 
-            <Border Grid.Column="2" Padding="16" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="Layers" Style="{ThemeResource SubtitleTextBlockStyle}" />
-                    <TextBlock Text="Application state will be projected here." Opacity="0.65" TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
+            <ContentControl x:Name="LayersDockHost" Grid.Column="2">
+                <Border x:Name="LayersPanel" Padding="16" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <StackPanel Spacing="8">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Layers" VerticalAlignment="Center" Style="{ThemeResource SubtitleTextBlockStyle}" />
+                            <Button
+                                x:Name="LayersDockToggleButton"
+                                Grid.Column="1"
+                                Tag="layers"
+                                Content="Float"
+                                Click="DockPanelToggle_Click"
+                                ToolTipService.ToolTip="Float or dock the Layers panel"
+                                AutomationProperties.Name="Float Layers panel" />
+                        </Grid>
+                        <TextBlock Text="Application state will be projected here." Opacity="0.65" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </ContentControl>
         </Grid>
 
         <Border Grid.Row="4" Padding="12,6" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
