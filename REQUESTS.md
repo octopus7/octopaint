@@ -697,3 +697,21 @@
 - 선택 상태는 Raster Layer 픽셀이 아니라 문서별 Application 상태로 보관한다.
 - Marching Ants 렌더러에는 전체 coverage bitmap 대신 선택/비선택 전이 edge만 전달하여 UI와 D3D 의존성을 Application에서 배제한다.
 - 선택 마스크 변경은 이미지 픽셀을 바꾸지 않지만 문서 편집 이력에는 포함한다.
+
+---
+
+# 요청 시작: 2026-08-06 18:25:21 KST | 작업 완료: 2026-08-06 18:32:47 KST (소요 시간: 0시간 7분 26초)
+
+## 구현 내역
+
+- D3D 캔버스 렌더러에 문서 픽셀 경계 좌표 기반 선택 edge 입력과 Clear API를 추가했다.
+- 문서 비트맵을 그린 뒤 1 physical pixel 두께의 aliased 검정 바탕과 흰색 dash를 별도 오버레이로 렌더링했다.
+- 8px 주기의 animation phase 설정·증가 API를 추가하고 문서 fit, DPI 배율과 clip 영역을 반영했다.
+- 각 edge의 절대 device-pixel 좌표를 dash 기준으로 사용하여 픽셀 단위로 나뉜 인접 선분 사이에서도 흑백 패턴이 연속되게 했다.
+- 빈 선택, 문서 해제, resize 및 device lost 시 선택 상태와 D2D brush 수명을 안전하게 처리했다.
+
+## 결정 내용
+
+- Marching Ants는 문서 픽셀에 합성하거나 저장하지 않고 D3D 최종 표시 단계에서만 그린다.
+- 선택 경계 입력은 Application 타입과 무관한 수평·수직 선분 값으로 제한한다.
+- 애니메이션은 선택 마스크를 다시 계산하지 않고 phase만 이동한 뒤 기존 프레임을 다시 표시한다.

@@ -32,6 +32,18 @@ namespace octopaint::winui
         float height{};
     };
 
+    // A selection boundary edge expressed in document pixel coordinates.
+    // Endpoints must form a horizontal or vertical segment. Coordinates refer
+    // to pixel boundaries, so a full-document outline spans (0, 0) to
+    // (document width, document height).
+    struct SelectionEdgeSegment final
+    {
+        float x1{};
+        float y1{};
+        float x2{};
+        float y2{};
+    };
+
     // Owns the Direct3D/Direct2D resources associated with one SwapChainPanel.
     // Call this object only from the UI thread that owns the attached panel.
     class D3DCanvasRenderer final
@@ -50,6 +62,11 @@ namespace octopaint::winui
 
         void SetDocument(DocumentBitmapView const& document);
         void ClearDocument() noexcept;
+        void SetSelectionOutline(std::span<SelectionEdgeSegment const> segments);
+        void ClearSelectionOutline() noexcept;
+        void SetSelectionAnimationPhase(float phase_pixels) noexcept;
+        void AdvanceSelectionAnimationPhase(float delta_pixels) noexcept;
+        [[nodiscard]] float SelectionAnimationPhase() const noexcept;
 
         [[nodiscard]] bool Render();
         [[nodiscard]] bool Render(DocumentBitmapView const& document);

@@ -24,6 +24,8 @@ namespace octopaint::winui
     {
         constexpr DXGI_FORMAT CanvasFormat = DXGI_FORMAT_B8G8R8A8_UNORM;
         constexpr float CheckerSize = 12.0F;
+        constexpr float SelectionDashLength = 4.0F;
+        constexpr float SelectionDashPeriod = SelectionDashLength * 2.0F;
 
         [[nodiscard]] std::uint32_t PixelSize(float logical_size, float rasterization_scale)
         {
@@ -94,6 +96,10 @@ namespace octopaint::winui
         {
             ValidateDocument(document);
 
+            if (document_width_ != document.width || document_height_ != document.height)
+            {
+                selection_segments_.clear();
+            }
             document_width_ = document.width;
             document_height_ = document.height;
             document_stride_ = document.stride;
@@ -110,6 +116,65 @@ namespace octopaint::winui
             document_pixels_.clear();
             document_bitmap_ = nullptr;
             document_rect_ = {};
+            selection_segments_.clear();
+        }
+
+        void SetSelectionOutline(std::span<SelectionEdgeSegment const> const segments)
+        {
+            std::vector<SelectionEdgeSegment> validated;
+            validated.reserve(segments.size());
+            for (auto const& segment : segments)
+            {
+                if (!std::isfinite(segment.x1) || !std::isfinite(segment.y1) ||
+                    !std::isfinite(segment.x2) || !std::isfinite(segment.y2))
+                {
+                    throw std::invalid_argument("Selection edge coordinates must be finite.");
+                }
+
+                auto const horizontal = segment.y1 == segment.y2;
+                auto const vertical = segment.x1 == segment.x2;
+                if (!horizontal && !vertical)
+                {
+                    throw std::invalid_argument("Selection edges must be horizontal or vertical.");
+                }
+                if (segment.x1 == segment.x2 && segment.y1 == segment.y2)
+                {
+                    continue;
+                }
+                validated.push_back(segment);
+            }
+            selection_segments_ = std::move(validated);
+        }
+
+        void ClearSelectionOutline() noexcept
+        {
+            selection_segments_.clear();
+        }
+
+        void SetSelectionAnimationPhase(float const phase_pixels) noexcept
+        {
+            if (!std::isfinite(phase_pixels))
+            {
+                return;
+            }
+            selection_phase_ = std::fmod(phase_pixels, SelectionDashPeriod);
+            if (selection_phase_ < 0.0F)
+            {
+                selection_phase_ += SelectionDashPeriod;
+            }
+        }
+
+        void AdvanceSelectionAnimationPhase(float const delta_pixels) noexcept
+        {
+            if (std::isfinite(delta_pixels))
+            {
+                SetSelectionAnimationPhase(selection_phase_ + delta_pixels);
+            }
+        }
+
+        [[nodiscard]] float SelectionAnimationPhase() const noexcept
+        {
+            return selection_phase_;
         }
 
         [[nodiscard]] bool Render()
@@ -137,6 +202,7 @@ namespace octopaint::winui
             if (document_width_ != 0 && document_height_ != 0)
             {
                 DrawDocument();
+                DrawSelectionOutline();
             }
 
             auto result = d2d_context_->EndDraw();
@@ -260,6 +326,12 @@ namespace octopaint::winui
             winrt::check_hresult(d2d_context_->CreateSolidColorBrush(
                 D2D1::ColorF(0xD8D8D8),
                 checker_dark_.put()));
+            winrt::check_hresult(d2d_context_->CreateSolidColorBrush(
+                D2D1::ColorF(0x000000),
+                selection_black_.put()));
+            winrt::check_hresult(d2d_context_->CreateSolidColorBrush(
+                D2D1::ColorF(0xFFFFFF),
+                selection_white_.put()));
         }
 
         void ReleaseDeviceResources() noexcept
@@ -272,6 +344,8 @@ namespace octopaint::winui
             document_bitmap_ = nullptr;
             checker_light_ = nullptr;
             checker_dark_ = nullptr;
+            selection_black_ = nullptr;
+            selection_white_ = nullptr;
             swap_chain_ = nullptr;
             d2d_context_ = nullptr;
             d2d_device_ = nullptr;
@@ -442,6 +516,123 @@ namespace octopaint::winui
             }
         }
 
+        void DrawSelectionOutline()
+        {
+            if (selection_segments_.empty() || !selection_black_ || !selection_white_ ||
+                document_rect_.width <= 0.0F || document_rect_.height <= 0.0F)
+            {
+                return;
+            }
+
+            auto const dpi_scale = rasterization_scale_;
+            D2D1_RECT_F const clip{
+                document_rect_.x * dpi_scale,
+                document_rect_.y * dpi_scale,
+                (document_rect_.x + document_rect_.width) * dpi_scale,
+                (document_rect_.y + document_rect_.height) * dpi_scale,
+            };
+            auto const x_scale = (clip.right - clip.left) / static_cast<float>(document_width_);
+            auto const y_scale = (clip.bottom - clip.top) / static_cast<float>(document_height_);
+            auto const previous_antialias_mode = d2d_context_->GetAntialiasMode();
+            d2d_context_->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
+            d2d_context_->PushAxisAlignedClip(clip, D2D1_ANTIALIAS_MODE_ALIASED);
+
+            for (auto const& source : selection_segments_)
+            {
+                auto const horizontal = source.y1 == source.y2;
+                auto const fixed_coordinate = horizontal ? source.y1 : source.x1;
+                auto const fixed_limit = horizontal
+                    ? static_cast<float>(document_height_)
+                    : static_cast<float>(document_width_);
+                if (fixed_coordinate < 0.0F || fixed_coordinate > fixed_limit)
+                {
+                    continue;
+                }
+
+                auto const variable_limit = horizontal
+                    ? static_cast<float>(document_width_)
+                    : static_cast<float>(document_height_);
+                auto first = std::clamp(horizontal ? source.x1 : source.y1, 0.0F, variable_limit);
+                auto second = std::clamp(horizontal ? source.x2 : source.y2, 0.0F, variable_limit);
+                if (first == second)
+                {
+                    continue;
+                }
+
+                if (second < first)
+                {
+                    std::swap(first, second);
+                }
+
+                D2D1_POINT_2F start{};
+                D2D1_POINT_2F end{};
+                if (horizontal)
+                {
+                    start = D2D1::Point2F(clip.left + first * x_scale, clip.top + fixed_coordinate * y_scale);
+                    end = D2D1::Point2F(clip.left + second * x_scale, start.y);
+                }
+                else
+                {
+                    start = D2D1::Point2F(clip.left + fixed_coordinate * x_scale, clip.top + first * y_scale);
+                    end = D2D1::Point2F(start.x, clip.top + second * y_scale);
+                }
+                DrawSelectionSegment(start, end);
+            }
+
+            d2d_context_->PopAxisAlignedClip();
+            d2d_context_->SetAntialiasMode(previous_antialias_mode);
+        }
+
+        void DrawSelectionSegment(D2D1_POINT_2F const start, D2D1_POINT_2F const end)
+        {
+            auto const delta_x = end.x - start.x;
+            auto const delta_y = end.y - start.y;
+            auto const length = std::abs(delta_x) + std::abs(delta_y);
+            if (length <= 0.0F)
+            {
+                return;
+            }
+
+            d2d_context_->DrawLine(start, end, selection_black_.get(), 1.0F);
+            auto const unit_x = delta_x / length;
+            auto const unit_y = delta_y / length;
+
+            // Anchor the dash pattern to absolute device-pixel coordinates,
+            // rather than restarting it at each submitted edge. Application
+            // snapshots commonly contain one edge per selected pixel; using a
+            // shared screen-space phase keeps adjacent and overlapping edges
+            // visually continuous without coupling the renderer to the mask.
+            auto const absolute_start = std::abs(delta_x) >= std::abs(delta_y)
+                ? start.x
+                : start.y;
+            auto cycle_position = std::fmod(
+                absolute_start + selection_phase_,
+                SelectionDashPeriod);
+            if (cycle_position < 0.0F)
+            {
+                cycle_position += SelectionDashPeriod;
+            }
+            auto distance = -cycle_position;
+            while (distance + SelectionDashLength <= 0.0F)
+            {
+                distance += SelectionDashPeriod;
+            }
+            for (; distance < length; distance += SelectionDashPeriod)
+            {
+                auto const dash_start = (std::max)(0.0F, distance);
+                auto const dash_end = (std::min)(length, distance + SelectionDashLength);
+                if (dash_end <= dash_start)
+                {
+                    continue;
+                }
+                d2d_context_->DrawLine(
+                    D2D1::Point2F(start.x + unit_x * dash_start, start.y + unit_y * dash_start),
+                    D2D1::Point2F(start.x + unit_x * dash_end, start.y + unit_y * dash_end),
+                    selection_white_.get(),
+                    1.0F);
+            }
+        }
+
         void UpdateDocumentRect() noexcept
         {
             if (document_width_ == 0 || document_height_ == 0 ||
@@ -477,8 +668,11 @@ namespace octopaint::winui
         winrt::com_ptr<ID2D1Bitmap1> document_bitmap_;
         winrt::com_ptr<ID2D1SolidColorBrush> checker_light_;
         winrt::com_ptr<ID2D1SolidColorBrush> checker_dark_;
+        winrt::com_ptr<ID2D1SolidColorBrush> selection_black_;
+        winrt::com_ptr<ID2D1SolidColorBrush> selection_white_;
 
         std::vector<std::byte> document_pixels_;
+        std::vector<SelectionEdgeSegment> selection_segments_;
         std::uint32_t document_width_{};
         std::uint32_t document_height_{};
         std::uint32_t document_stride_{};
@@ -487,6 +681,7 @@ namespace octopaint::winui
         float logical_width_{};
         float logical_height_{};
         float rasterization_scale_{ 1.0F };
+        float selection_phase_{};
         CanvasDocumentRect document_rect_{};
     };
 
@@ -516,6 +711,31 @@ namespace octopaint::winui
     void D3DCanvasRenderer::ClearDocument() noexcept
     {
         impl_->ClearDocument();
+    }
+
+    void D3DCanvasRenderer::SetSelectionOutline(std::span<SelectionEdgeSegment const> const segments)
+    {
+        impl_->SetSelectionOutline(segments);
+    }
+
+    void D3DCanvasRenderer::ClearSelectionOutline() noexcept
+    {
+        impl_->ClearSelectionOutline();
+    }
+
+    void D3DCanvasRenderer::SetSelectionAnimationPhase(float const phase_pixels) noexcept
+    {
+        impl_->SetSelectionAnimationPhase(phase_pixels);
+    }
+
+    void D3DCanvasRenderer::AdvanceSelectionAnimationPhase(float const delta_pixels) noexcept
+    {
+        impl_->AdvanceSelectionAnimationPhase(delta_pixels);
+    }
+
+    float D3DCanvasRenderer::SelectionAnimationPhase() const noexcept
+    {
+        return impl_->SelectionAnimationPhase();
     }
 
     bool D3DCanvasRenderer::Render()

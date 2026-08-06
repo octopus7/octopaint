@@ -99,6 +99,7 @@
 
 - [x] SwapChainPanel 기반 Direct3D 11/Direct2D 캔버스 렌더러와 WARP 폴백
 - [x] Windows 10 DXGI/SwapChain COM 호환성과 실행 직후 생존 검증
+- [x] 이미지와 분리된 애니메이션 Marching Ants 선택 경계 오버레이
 - [ ] CPU 정확성 참조 합성 경로 및 Direct3D 결과 일치 검증
 - [ ] 블렌딩 모드 합성기
 - [ ] 명도/대비 조정
