@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <format>
 #include <limits>
+#include <ranges>
 
 namespace winrt::OctoPaint::WinUI::implementation
 {
@@ -50,8 +51,8 @@ namespace winrt::OctoPaint::WinUI::implementation
         [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
         [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
     {
-        ForegroundSwatchPreview().Background(ColorBrush(foreground_color_));
-        BackgroundSwatchPreview().Background(ColorBrush(background_color_));
+        canvas_renderer_.Attach(CanvasSwapChainPanel());
+        RefreshColorSwatches();
         ProjectToolOptionsToControls();
         RefreshView();
     }
@@ -93,9 +94,8 @@ namespace winrt::OctoPaint::WinUI::implementation
         [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
     {
         CloseColorEditorBeforeExternalChange();
-        std::swap(foreground_color_, background_color_);
-        ForegroundSwatchPreview().Background(ColorBrush(foreground_color_));
-        BackgroundSwatchPreview().Background(ColorBrush(background_color_));
+        editor_state_.SwapColors();
+        RefreshColorSwatches();
     }
 
     void MainWindow::ResetColors_Click(
@@ -103,10 +103,8 @@ namespace winrt::OctoPaint::WinUI::implementation
         [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
     {
         CloseColorEditorBeforeExternalChange();
-        foreground_color_ = { 0.0, 0.0, 0.0, 1.0 };
-        background_color_ = { 0.0, 0.0, 1.0, 1.0 };
-        ForegroundSwatchPreview().Background(ColorBrush(foreground_color_));
-        BackgroundSwatchPreview().Background(ColorBrush(background_color_));
+        editor_state_.ResetColors();
+        RefreshColorSwatches();
     }
 
     void MainWindow::ColorSlider_ValueChanged(
@@ -118,11 +116,10 @@ namespace winrt::OctoPaint::WinUI::implementation
             return;
         }
 
-        auto& color = EditingTarget();
-        color.hue = HueSlider().Value();
-        color.saturation = SaturationSlider().Value() / 100.0;
-        color.value = ValueSlider().Value() / 100.0;
-        color.alpha = AlphaSlider().Value() / 100.0;
+        editing_color_.hue = HueSlider().Value();
+        editing_color_.saturation = SaturationSlider().Value() / 100.0;
+        editing_color_.value = ValueSlider().Value() / 100.0;
+        editing_color_.alpha = AlphaSlider().Value() / 100.0;
         SyncColorEditor();
     }
 
@@ -135,13 +132,13 @@ namespace winrt::OctoPaint::WinUI::implementation
             return;
         }
 
-        auto const previous_alpha = EditingTarget().alpha;
-        EditingTarget() = ToHsva({
+        auto const previous_alpha = editing_color_.alpha;
+        editing_color_ = ToHsva({
             static_cast<std::uint8_t>(NumberBoxByte(RedNumberBox())),
             static_cast<std::uint8_t>(NumberBoxByte(GreenNumberBox())),
             static_cast<std::uint8_t>(NumberBoxByte(BlueNumberBox())),
             ToByte(previous_alpha) });
-        EditingTarget().alpha = previous_alpha;
+        editing_color_.alpha = previous_alpha;
         SyncColorEditor();
     }
 
@@ -167,13 +164,13 @@ namespace winrt::OctoPaint::WinUI::implementation
             return;
         }
 
-        auto const previous_alpha = EditingTarget().alpha;
-        EditingTarget() = ToHsva({
+        auto const previous_alpha = editing_color_.alpha;
+        editing_color_ = ToHsva({
             static_cast<std::uint8_t>((rgb >> 16) & 0xff),
             static_cast<std::uint8_t>((rgb >> 8) & 0xff),
             static_cast<std::uint8_t>(rgb & 0xff),
             ToByte(previous_alpha) });
-        EditingTarget().alpha = previous_alpha;
+        editing_color_.alpha = previous_alpha;
         SyncColorEditor();
     }
 
@@ -290,10 +287,25 @@ namespace winrt::OctoPaint::WinUI::implementation
         [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
     {
         auto lifetime = get_strong();
-        PressureCurveComboBox().SelectedIndex(tool_options_.pressure_curve_preset);
-        PressureGammaNumberBox().Value(tool_options_.pressure_gamma);
-        StabilizerStrengthNumberBox().Value(tool_options_.stabilizer_strength);
-        StabilizerSmoothingNumberBox().Value(tool_options_.stabilizer_smoothing);
+        auto const state = editor_state_.Snapshot();
+        auto const gamma = state.Pressure().gamma;
+        auto preset = 3;
+        if (std::abs(gamma - 1.0F) < 0.001F)
+        {
+            preset = 0;
+        }
+        else if (std::abs(gamma - 0.65F) < 0.001F)
+        {
+            preset = 1;
+        }
+        else if (std::abs(gamma - 1.5F) < 0.001F)
+        {
+            preset = 2;
+        }
+        PressureCurveComboBox().SelectedIndex(preset);
+        PressureGammaNumberBox().Value(gamma);
+        StabilizerStrengthNumberBox().Value(state.Stabilizer().strength * 100.0);
+        StabilizerSmoothingNumberBox().Value(state.Stabilizer().smoothing * 100.0);
         SensitivityDialog().XamlRoot(RootGrid().XamlRoot());
         [[maybe_unused]] auto const result = co_await SensitivityDialog().ShowAsync();
     }
@@ -302,30 +314,243 @@ namespace winrt::OctoPaint::WinUI::implementation
         [[maybe_unused]] Microsoft::UI::Xaml::Controls::ContentDialog const& sender,
         [[maybe_unused]] Microsoft::UI::Xaml::Controls::ContentDialogButtonClickEventArgs const& event_args)
     {
-        tool_options_.pressure_curve_preset = (std::max)(0, PressureCurveComboBox().SelectedIndex());
-        tool_options_.pressure_gamma = PressureGammaNumberBox().Value();
-        tool_options_.stabilizer_strength = StabilizerStrengthNumberBox().Value();
-        tool_options_.stabilizer_smoothing = StabilizerSmoothingNumberBox().Value();
+        auto gamma = PressureGammaNumberBox().Value();
+        switch (PressureCurveComboBox().SelectedIndex())
+        {
+        case 0: gamma = 1.0; break;
+        case 1: gamma = 0.65; break;
+        case 2: gamma = 1.5; break;
+        default: break;
+        }
+        editor_state_.SetPressureGamma(static_cast<float>(gamma));
+        editor_state_.SetStabilizerStrength(
+            static_cast<float>(StabilizerStrengthNumberBox().Value() / 100.0));
+        editor_state_.SetStabilizerSmoothing(
+            static_cast<float>(StabilizerSmoothingNumberBox().Value() / 100.0));
     }
 
-    void MainWindow::Canvas_PointerInput(
+    void MainWindow::Canvas_PointerPressed(
         [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
         Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
     {
         UpdatePointerDevice(event_args);
+
+        auto const tool = editor_state_.Snapshot().ActiveTool();
+        if (tool != octopaint::application::EditorTool::Pencil &&
+            tool != octopaint::application::EditorTool::Airbrush)
+        {
+            return;
+        }
+
+        auto const point = event_args.GetCurrentPoint(CanvasInputSurface());
+        auto const properties = point.Properties();
+        if (!properties.IsLeftButtonPressed() && !point.IsInContact())
+        {
+            return;
+        }
+
+        auto const snapshot = workspace_.Snapshot();
+        if (!snapshot.active_document_id || !snapshot.active_layer_id ||
+            !canvas_renderer_.TryMapPanelToDocument(
+                static_cast<float>(point.Position().X),
+                static_cast<float>(point.Position().Y)))
+        {
+            return;
+        }
+
+        paint_stroke_active_ = CanvasInputSurface().CapturePointer(event_args.Pointer());
+        if (!paint_stroke_active_)
+        {
+            return;
+        }
+
+        paint_pointer_id_ = event_args.Pointer().PointerId();
+        paint_document_id_ = *snapshot.active_document_id;
+        paint_layer_id_ = *snapshot.active_layer_id;
+        previous_pointer_timestamp_ = 0;
+        paint_samples_.clear();
+        AppendPointerSamples(event_args);
+        event_args.Handled(true);
+    }
+
+    void MainWindow::Canvas_PointerMoved(
+        [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
+        Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
+    {
+        UpdatePointerDevice(event_args);
+        if (!paint_stroke_active_ || event_args.Pointer().PointerId() != paint_pointer_id_)
+        {
+            return;
+        }
+
+        AppendPointerSamples(event_args);
+        event_args.Handled(true);
+    }
+
+    void MainWindow::Canvas_PointerReleased(
+        [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
+        Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
+    {
+        if (!paint_stroke_active_ || event_args.Pointer().PointerId() != paint_pointer_id_)
+        {
+            return;
+        }
+
+        AppendPointerSamples(event_args);
+        CompletePaintStroke(true);
+        CanvasInputSurface().ReleasePointerCapture(event_args.Pointer());
+        event_args.Handled(true);
+    }
+
+    void MainWindow::Canvas_PointerCanceled(
+        [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
+        Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
+    {
+        if (paint_stroke_active_ && event_args.Pointer().PointerId() == paint_pointer_id_)
+        {
+            CompletePaintStroke(false);
+            CanvasInputSurface().ReleasePointerCapture(event_args.Pointer());
+            event_args.Handled(true);
+        }
+    }
+
+    void MainWindow::Canvas_PointerCaptureLost(
+        [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
+        Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
+    {
+        if (paint_stroke_active_ && event_args.Pointer().PointerId() == paint_pointer_id_)
+        {
+            CompletePaintStroke(false);
+        }
+    }
+
+    void MainWindow::Canvas_SizeChanged(
+        [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
+        Microsoft::UI::Xaml::SizeChangedEventArgs const& event_args)
+    {
+        auto scale = 1.0F;
+        if (auto const xaml_root = CanvasInputSurface().XamlRoot())
+        {
+            scale = static_cast<float>(xaml_root.RasterizationScale());
+        }
+        canvas_renderer_.Resize(
+            static_cast<float>(event_args.NewSize().Width),
+            static_cast<float>(event_args.NewSize().Height),
+            scale);
+        [[maybe_unused]] auto const rendered = canvas_renderer_.Render();
+    }
+
+    void MainWindow::AppendPointerSamples(
+        Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
+    {
+        std::vector<Microsoft::UI::Input::PointerPoint> points;
+        for (auto const& point : event_args.GetIntermediatePoints(CanvasInputSurface()))
+        {
+            points.push_back(point);
+        }
+        std::ranges::sort(points, [](auto const& left, auto const& right)
+        {
+            return left.Timestamp() < right.Timestamp();
+        });
+
+        for (auto const& point : points)
+        {
+            auto const timestamp = point.Timestamp();
+            if (previous_pointer_timestamp_ != 0 && timestamp <= previous_pointer_timestamp_)
+            {
+                continue;
+            }
+
+            auto const document_point = canvas_renderer_.TryMapPanelToDocument(
+                static_cast<float>(point.Position().X),
+                static_cast<float>(point.Position().Y));
+            if (!document_point)
+            {
+                continue;
+            }
+
+            auto pressure = 1.0F;
+            if (event_args.Pointer().PointerDeviceType() == Microsoft::UI::Input::PointerDeviceType::Pen)
+            {
+                pressure = std::clamp(point.Properties().Pressure(), 0.0F, 1.0F);
+            }
+
+            auto const elapsed = previous_pointer_timestamp_ == 0
+                ? 0.0
+                : static_cast<double>(timestamp - previous_pointer_timestamp_) / 1'000'000.0;
+            paint_samples_.push_back({
+                .x = static_cast<double>(document_point->x),
+                .y = static_cast<double>(document_point->y),
+                .pressure = pressure,
+                .elapsed_seconds = elapsed });
+            previous_pointer_timestamp_ = timestamp;
+        }
+    }
+
+    void MainWindow::CompletePaintStroke(bool const commit)
+    {
+        if (!paint_stroke_active_)
+        {
+            return;
+        }
+        paint_stroke_active_ = false;
+
+        if (commit && !paint_samples_.empty())
+        {
+            auto const state = editor_state_.Snapshot();
+            auto const color = state.ForegroundColor();
+            auto const& brush = state.Brush();
+            auto const& pressure = state.Pressure();
+            auto const& stabilizer = state.Stabilizer();
+
+            octopaint::application::PaintStrokeRequest request{
+                .document_id = paint_document_id_,
+                .layer_id = paint_layer_id_,
+                .tool = state.ActiveTool() == octopaint::application::EditorTool::Airbrush
+                    ? octopaint::application::PaintTool::Airbrush
+                    : octopaint::application::PaintTool::Pencil,
+                .color = { color.red, color.green, color.blue, color.alpha },
+                .brush = {
+                    .radius = brush.size_pixels * 0.5F,
+                    .flow_per_second = brush.flow,
+                    .fixed_timestep_seconds = 1.0F / 60.0F,
+                    .hardness = brush.hardness,
+                    .spacing = brush.spacing,
+                    .opacity = brush.opacity,
+                    .pressure_affects_size = brush.pressure_affects_size,
+                    .pressure_affects_opacity = brush.pressure_affects_opacity },
+                .pressure = {
+                    .minimum_input = pressure.minimum_input,
+                    .maximum_input = pressure.maximum_input,
+                    .gamma = pressure.gamma },
+                .stabilizer = {
+                    .enabled = stabilizer.enabled,
+                    .strength = stabilizer.strength },
+                .samples = std::move(paint_samples_) };
+            [[maybe_unused]] auto const result = workspace_.ApplyPaintStroke(request);
+            RefreshView();
+        }
+
+        paint_samples_.clear();
+        paint_pointer_id_ = 0;
+        previous_pointer_timestamp_ = 0;
+        paint_document_id_ = {};
+        paint_layer_id_ = {};
     }
 
     void MainWindow::ProjectToolOptionsToControls()
     {
+        auto const state = editor_state_.Snapshot();
+        auto const& brush = state.Brush();
         suppress_tool_option_events_ = true;
-        BrushSizeNumberBox().Value(tool_options_.brush_size);
-        HardnessNumberBox().Value(tool_options_.hardness);
-        SpacingNumberBox().Value(tool_options_.spacing);
-        FlowNumberBox().Value(tool_options_.flow);
-        OpacityNumberBox().Value(tool_options_.opacity);
-        PressureSizeCheckBox().IsChecked(tool_options_.pressure_affects_dab_size);
-        PressureOpacityCheckBox().IsChecked(tool_options_.pressure_affects_opacity);
-        StrokeStabilizerCheckBox().IsChecked(tool_options_.stroke_stabilizer);
+        BrushSizeNumberBox().Value(brush.size_pixels);
+        HardnessNumberBox().Value(brush.hardness * 100.0);
+        SpacingNumberBox().Value(brush.spacing * 100.0);
+        FlowNumberBox().Value(brush.flow * 100.0);
+        OpacityNumberBox().Value(brush.opacity * 100.0);
+        PressureSizeCheckBox().IsChecked(brush.pressure_affects_size);
+        PressureOpacityCheckBox().IsChecked(brush.pressure_affects_opacity);
+        StrokeStabilizerCheckBox().IsChecked(state.Stabilizer().enabled);
         PressureSizeCheckBox().IsEnabled(stylus_detected_);
         PressureOpacityCheckBox().IsEnabled(stylus_detected_);
         suppress_tool_option_events_ = false;
@@ -344,14 +569,20 @@ namespace winrt::OctoPaint::WinUI::implementation
             return std::isnan(value) ? fallback : value;
         };
 
-        tool_options_.brush_size = value_or(BrushSizeNumberBox(), tool_options_.brush_size);
-        tool_options_.hardness = value_or(HardnessNumberBox(), tool_options_.hardness);
-        tool_options_.spacing = value_or(SpacingNumberBox(), tool_options_.spacing);
-        tool_options_.flow = value_or(FlowNumberBox(), tool_options_.flow);
-        tool_options_.opacity = value_or(OpacityNumberBox(), tool_options_.opacity);
-        tool_options_.pressure_affects_dab_size = IsChecked(PressureSizeCheckBox());
-        tool_options_.pressure_affects_opacity = IsChecked(PressureOpacityCheckBox());
-        tool_options_.stroke_stabilizer = IsChecked(StrokeStabilizerCheckBox());
+        auto const state = editor_state_.Snapshot();
+        editor_state_.SetBrushSize(static_cast<float>(
+            value_or(BrushSizeNumberBox(), state.Brush().size_pixels)));
+        editor_state_.SetBrushHardness(static_cast<float>(
+            value_or(HardnessNumberBox(), state.Brush().hardness * 100.0) / 100.0));
+        editor_state_.SetBrushSpacing(static_cast<float>(
+            value_or(SpacingNumberBox(), state.Brush().spacing * 100.0) / 100.0));
+        editor_state_.SetBrushFlow(static_cast<float>(
+            value_or(FlowNumberBox(), state.Brush().flow * 100.0) / 100.0));
+        editor_state_.SetBrushOpacity(static_cast<float>(
+            value_or(OpacityNumberBox(), state.Brush().opacity * 100.0) / 100.0));
+        editor_state_.SetPressureAffectsSize(IsChecked(PressureSizeCheckBox()));
+        editor_state_.SetPressureAffectsOpacity(IsChecked(PressureOpacityCheckBox()));
+        editor_state_.SetStabilizerEnabled(IsChecked(StrokeStabilizerCheckBox()));
     }
 
     void MainWindow::UpdatePointerDevice(Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
@@ -391,8 +622,63 @@ namespace winrt::OctoPaint::WinUI::implementation
         StatusText().Text(winrt::to_hstring(std::format(
             "{} | Tool: {}",
             snapshot.status_message,
-            winrt::to_string(selected_tool_))));
+            winrt::to_string(ToolName(editor_state_.Snapshot().ActiveTool())))));
         RefreshDocumentTabs(snapshot);
+        RefreshCanvas(snapshot);
+    }
+
+    void MainWindow::RefreshCanvas(octopaint::application::WorkspaceSnapshot const& snapshot)
+    {
+        if (!snapshot.active_document_id || !snapshot.active_layer_id)
+        {
+            canvas_renderer_.ClearDocument();
+            [[maybe_unused]] auto const rendered = canvas_renderer_.Render();
+            DocumentTitleText().Visibility(Microsoft::UI::Xaml::Visibility::Visible);
+            return;
+        }
+
+        auto const pixels = workspace_.SnapshotRasterLayerPixels(
+            *snapshot.active_document_id,
+            *snapshot.active_layer_id);
+        if (!pixels)
+        {
+            canvas_renderer_.ClearDocument();
+            [[maybe_unused]] auto const rendered = canvas_renderer_.Render();
+            DocumentTitleText().Visibility(Microsoft::UI::Xaml::Visibility::Visible);
+            return;
+        }
+
+        DocumentTitleText().Visibility(Microsoft::UI::Xaml::Visibility::Collapsed);
+        [[maybe_unused]] auto const rendered = canvas_renderer_.Render({
+            .width = pixels->size.width,
+            .height = pixels->size.height,
+            .stride = static_cast<std::uint32_t>(pixels->row_stride),
+            .premultiplied_bgra = pixels->pixels_bgra_premultiplied });
+    }
+
+    octopaint::application::EditorTool MainWindow::ToolFromName(hstring const& tool_name) noexcept
+    {
+        if (tool_name == L"Airbrush") return octopaint::application::EditorTool::Airbrush;
+        if (tool_name == L"Rectangular Marquee") return octopaint::application::EditorTool::RectangularMarquee;
+        if (tool_name == L"Elliptical Marquee") return octopaint::application::EditorTool::EllipticalMarquee;
+        if (tool_name == L"Freehand Lasso") return octopaint::application::EditorTool::FreehandLasso;
+        if (tool_name == L"Polygonal Lasso") return octopaint::application::EditorTool::PolygonalLasso;
+        if (tool_name == L"Move Layer") return octopaint::application::EditorTool::MoveLayer;
+        return octopaint::application::EditorTool::Pencil;
+    }
+
+    hstring MainWindow::ToolName(octopaint::application::EditorTool const tool)
+    {
+        switch (tool)
+        {
+        case octopaint::application::EditorTool::Airbrush: return L"Airbrush";
+        case octopaint::application::EditorTool::RectangularMarquee: return L"Rectangular Marquee";
+        case octopaint::application::EditorTool::EllipticalMarquee: return L"Elliptical Marquee";
+        case octopaint::application::EditorTool::FreehandLasso: return L"Freehand Lasso";
+        case octopaint::application::EditorTool::PolygonalLasso: return L"Polygonal Lasso";
+        case octopaint::application::EditorTool::MoveLayer: return L"Move Layer";
+        default: return L"Pencil";
+        }
     }
 
     void MainWindow::RefreshDocumentTabs(octopaint::application::WorkspaceSnapshot const& snapshot)
@@ -441,7 +727,7 @@ namespace winrt::OctoPaint::WinUI::implementation
             button.IsChecked(button == selected_button);
         }
 
-        selected_tool_ = unbox_value<hstring>(selected_button.Tag());
+        editor_state_.SetActiveTool(ToolFromName(unbox_value<hstring>(selected_button.Tag())));
     }
 
     void MainWindow::BeginColorEdit(
@@ -450,7 +736,10 @@ namespace winrt::OctoPaint::WinUI::implementation
     {
         CloseColorEditorBeforeExternalChange();
         editing_foreground_ = foreground;
-        original_edit_color_ = EditingTarget();
+        auto const state = editor_state_.Snapshot();
+        auto const source = foreground ? state.ForegroundColor() : state.BackgroundColor();
+        editing_color_ = ToHsva({ source.red, source.green, source.blue, source.alpha });
+        original_edit_color_ = editing_color_;
         color_edit_active_ = true;
         ColorEditorTitle().Text(foreground ? L"Foreground color" : L"Background color");
         SyncColorEditor();
@@ -466,7 +755,7 @@ namespace winrt::OctoPaint::WinUI::implementation
 
         suppress_color_events_ = true;
 
-        auto const& color = EditingTarget();
+        auto const& color = editing_color_;
         auto const rgba = ToRgba(color);
 
         HueSlider().Value(color.hue);
@@ -488,7 +777,7 @@ namespace winrt::OctoPaint::WinUI::implementation
 
     void MainWindow::UpdateColorPreview()
     {
-        auto const brush = ColorBrush(EditingTarget());
+        auto const brush = ColorBrush(editing_color_);
         ColorEditorPreview().Background(brush);
         if (editing_foreground_)
         {
@@ -502,15 +791,8 @@ namespace winrt::OctoPaint::WinUI::implementation
 
     void MainWindow::RestoreEditingColor()
     {
-        EditingTarget() = original_edit_color_;
-        if (editing_foreground_)
-        {
-            ForegroundSwatchPreview().Background(ColorBrush(foreground_color_));
-        }
-        else
-        {
-            BackgroundSwatchPreview().Background(ColorBrush(background_color_));
-        }
+        editing_color_ = original_edit_color_;
+        RefreshColorSwatches();
     }
 
     void MainWindow::FinishColorEdit(bool const apply)
@@ -520,7 +802,22 @@ namespace winrt::OctoPaint::WinUI::implementation
             return;
         }
 
-        if (!apply)
+        if (apply)
+        {
+            auto const color = ToRgba(editing_color_);
+            auto const editor_color = octopaint::application::EditorColor{
+                color.red, color.green, color.blue, color.alpha };
+            if (editing_foreground_)
+            {
+                editor_state_.SetForegroundColor(editor_color);
+            }
+            else
+            {
+                editor_state_.SetBackgroundColor(editor_color);
+            }
+            RefreshColorSwatches();
+        }
+        else
         {
             RestoreEditingColor();
         }
@@ -539,14 +836,15 @@ namespace winrt::OctoPaint::WinUI::implementation
         }
     }
 
-    MainWindow::HsvaColor& MainWindow::EditingTarget() noexcept
+    void MainWindow::RefreshColorSwatches()
     {
-        return editing_foreground_ ? foreground_color_ : background_color_;
-    }
-
-    MainWindow::HsvaColor const& MainWindow::EditingTarget() const noexcept
-    {
-        return editing_foreground_ ? foreground_color_ : background_color_;
+        auto const state = editor_state_.Snapshot();
+        auto const foreground = state.ForegroundColor();
+        auto const background = state.BackgroundColor();
+        ForegroundSwatchPreview().Background(ColorBrush(ToHsva({
+            foreground.red, foreground.green, foreground.blue, foreground.alpha })));
+        BackgroundSwatchPreview().Background(ColorBrush(ToHsva({
+            background.red, background.green, background.blue, background.alpha })));
     }
 
     MainWindow::RgbaColor MainWindow::ToRgba(HsvaColor const& color) noexcept

@@ -130,7 +130,7 @@
                             ToolTipService.ToolTip="Set how much short pointer movement is smoothed."
                             AutomationProperties.Name="Stroke stabilizer smoothing" />
                         <TextBlock
-                            Text="These values are currently held by the WinUI adapter and will move to the application tool-options port."
+                            Text="These settings are shared through the frontend-neutral application editor state."
                             Opacity="0.65"
                             TextWrapping="Wrap"
                             Style="{ThemeResource CaptionTextBlockStyle}" />
@@ -299,14 +299,24 @@
                     TabCloseRequested="DocumentTabs_TabCloseRequested"
                     AutomationProperties.Name="Open documents" />
 
-                <Border x:Name="CanvasSurface" Grid.Row="1" Margin="12" Background="#202124" CornerRadius="6" PointerPressed="Canvas_PointerInput" PointerMoved="Canvas_PointerInput">
-                    <Grid>
+                <Border x:Name="CanvasSurface" Grid.Row="1" Margin="12" Background="#202124" CornerRadius="6">
+                    <Grid
+                        x:Name="CanvasInputSurface"
+                        Background="Transparent"
+                        SizeChanged="Canvas_SizeChanged"
+                        PointerPressed="Canvas_PointerPressed"
+                        PointerMoved="Canvas_PointerMoved"
+                        PointerReleased="Canvas_PointerReleased"
+                        PointerCanceled="Canvas_PointerCanceled"
+                        PointerCaptureLost="Canvas_PointerCaptureLost">
+                        <SwapChainPanel x:Name="CanvasSwapChainPanel" />
                         <TextBlock
                             x:Name="DocumentTitleText"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Foreground="White"
-                            FontSize="24" />
+                            FontSize="24"
+                            IsHitTestVisible="False" />
                     </Grid>
                 </Border>
             </Grid>

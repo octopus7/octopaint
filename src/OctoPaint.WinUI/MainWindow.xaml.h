@@ -1,11 +1,13 @@
 #pragma once
 
 #include "MainWindow.g.h"
-#include "ToolOptionsState.h"
+#include "D3DCanvasRenderer.h"
 
+#include <octopaint/application/EditorState.h>
 #include <octopaint/application/Workspace.h>
 
 #include <array>
+#include <chrono>
 
 namespace winrt::OctoPaint::WinUI::implementation
 {
@@ -97,9 +99,29 @@ namespace winrt::OctoPaint::WinUI::implementation
             Microsoft::UI::Xaml::Controls::ContentDialog const& sender,
             Microsoft::UI::Xaml::Controls::ContentDialogButtonClickEventArgs const& event_args);
 
-        void Canvas_PointerInput(
+        void Canvas_PointerPressed(
             Windows::Foundation::IInspectable const& sender,
             Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args);
+
+        void Canvas_PointerMoved(
+            Windows::Foundation::IInspectable const& sender,
+            Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args);
+
+        void Canvas_PointerReleased(
+            Windows::Foundation::IInspectable const& sender,
+            Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args);
+
+        void Canvas_PointerCanceled(
+            Windows::Foundation::IInspectable const& sender,
+            Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args);
+
+        void Canvas_PointerCaptureLost(
+            Windows::Foundation::IInspectable const& sender,
+            Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args);
+
+        void Canvas_SizeChanged(
+            Windows::Foundation::IInspectable const& sender,
+            Microsoft::UI::Xaml::SizeChangedEventArgs const& event_args);
 
     private:
         struct HsvaColor final
@@ -124,6 +146,12 @@ namespace winrt::OctoPaint::WinUI::implementation
         void ProjectToolOptionsToControls();
         void CaptureToolOptionsFromControls();
         void UpdatePointerDevice(Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args);
+        void AppendPointerSamples(Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args);
+        void CompletePaintStroke(bool commit);
+        void RefreshCanvas(octopaint::application::WorkspaceSnapshot const& snapshot);
+        void RefreshColorSwatches();
+        [[nodiscard]] static octopaint::application::EditorTool ToolFromName(hstring const& tool_name) noexcept;
+        [[nodiscard]] static hstring ToolName(octopaint::application::EditorTool tool);
         [[nodiscard]] static bool IsChecked(Microsoft::UI::Xaml::Controls::Primitives::ToggleButton const& toggle);
 
         void BeginColorEdit(
@@ -135,19 +163,17 @@ namespace winrt::OctoPaint::WinUI::implementation
         void FinishColorEdit(bool apply);
         void CloseColorEditorBeforeExternalChange();
 
-        [[nodiscard]] HsvaColor& EditingTarget() noexcept;
-        [[nodiscard]] HsvaColor const& EditingTarget() const noexcept;
         [[nodiscard]] static RgbaColor ToRgba(HsvaColor const& color) noexcept;
         [[nodiscard]] static HsvaColor ToHsva(RgbaColor const& color) noexcept;
         [[nodiscard]] static Microsoft::UI::Xaml::Media::SolidColorBrush ColorBrush(HsvaColor const& color);
 
         octopaint::application::Workspace workspace_;
+        octopaint::application::EditorState editor_state_;
+        octopaint::winui::D3DCanvasRenderer canvas_renderer_;
         std::uint32_t next_document_number_{ 1 };
         std::vector<octopaint::application::DocumentId> tab_document_ids_;
-        hstring selected_tool_{ L"Pencil" };
 
-        HsvaColor foreground_color_{ 0.0, 0.0, 0.0, 1.0 };
-        HsvaColor background_color_{ 0.0, 0.0, 1.0, 1.0 };
+        HsvaColor editing_color_{};
         HsvaColor original_edit_color_{};
         bool editing_foreground_{ true };
         bool color_edit_active_{};
@@ -155,7 +181,12 @@ namespace winrt::OctoPaint::WinUI::implementation
         bool suppress_tab_events_{};
         bool suppress_tool_option_events_{};
         bool stylus_detected_{};
-        octopaint::winui::ToolOptionsState tool_options_{};
+        bool paint_stroke_active_{};
+        std::uint32_t paint_pointer_id_{};
+        std::uint64_t previous_pointer_timestamp_{};
+        octopaint::application::DocumentId paint_document_id_;
+        octopaint::application::LayerId paint_layer_id_;
+        std::vector<octopaint::application::PaintPointerSample> paint_samples_;
         Microsoft::UI::Xaml::DispatcherTimer splash_timer_{ nullptr };
     };
 }
