@@ -9,6 +9,7 @@
 
 #include <array>
 #include <chrono>
+#include <optional>
 
 namespace winrt::OctoPaint::WinUI::implementation
 {
@@ -193,12 +194,11 @@ namespace winrt::OctoPaint::WinUI::implementation
         bool suppress_tool_option_events_{};
         bool stylus_detected_{};
         bool paint_stroke_active_{};
+        bool paint_segment_break_pending_{};
         bool dockable_panels_registered_{};
         std::uint32_t paint_pointer_id_{};
         std::uint64_t previous_pointer_timestamp_{};
-        octopaint::application::DocumentId paint_document_id_;
-        octopaint::application::LayerId paint_layer_id_;
-        std::vector<octopaint::application::PaintPointerSample> paint_samples_;
+        std::optional<octopaint::application::PaintStrokeRequest> active_paint_request_;
         Microsoft::UI::Xaml::DispatcherTimer splash_timer_{ nullptr };
     };
 }

@@ -108,6 +108,41 @@ int main()
         Require(redone && redone->revision == 1 && ByteAt(*redone, 2, 1, 2) == 255,
             "Redo must restore the exact post-stroke pixels and revision.");
 
+        Workspace segmented_workspace;
+        auto const segmented_document = segmented_workspace.NewDocument("Segments", { 10, 3 });
+        auto const segmented_layer = ActiveLayer(segmented_workspace);
+        auto segmented = Pencil(segmented_document, segmented_layer, { 255, 255, 255, 255 }, {
+            { 1.0, 1.0, 1.0F, 0.0, false },
+            { 2.0, 1.0, 1.0F, 0.01, false },
+            { 7.0, 1.0, 1.0F, 0.0, true },
+            { 8.0, 1.0, 1.0F, 0.01, false }
+        });
+        segmented.stabilizer.enabled = true;
+        segmented.stabilizer.strength = 0.75F;
+        Require(segmented_workspace.ApplyPaintStroke(segmented).status == PaintStrokeStatus::Applied,
+            "Disconnected pointer segments must remain one applied stroke.");
+        auto segmented_pixels = segmented_workspace.SnapshotRasterLayerPixels(
+            segmented_document, segmented_layer);
+        Require(segmented_pixels
+            && ByteAt(*segmented_pixels, 1, 1, 3) == 255
+            && ByteAt(*segmented_pixels, 2, 1, 3) == 255
+            && ByteAt(*segmented_pixels, 7, 1, 3) == 255
+            && ByteAt(*segmented_pixels, 8, 1, 3) == 255,
+            "Each disconnected segment must paint its own endpoints.");
+        for (std::uint32_t x = 3; x <= 6; ++x)
+        {
+            Require(ByteAt(*segmented_pixels, x, 1, 3) == 0,
+                "A segment break must not draw a chord across the skipped pointer region.");
+        }
+        Require(segmented_workspace.Snapshot().active_commands.undo_label == "Pencil stroke"
+            && segmented_workspace.Undo(segmented_document),
+            "All disconnected segments must share one undo entry.");
+        auto segmented_undone = segmented_workspace.SnapshotRasterLayerPixels(
+            segmented_document, segmented_layer);
+        Require(segmented_undone && ByteAt(*segmented_undone, 1, 1, 3) == 0
+            && ByteAt(*segmented_undone, 8, 1, 3) == 0,
+            "One undo must remove every segment in the request.");
+
         // Detached snapshots must not expose mutable workspace storage.
         redone->pixels_bgra_premultiplied[0] = std::byte{ 0x7f };
         auto detached_check = workspace.SnapshotRasterLayerPixels(document, layer);
@@ -157,7 +192,10 @@ int main()
             .layer_id = airbrush_layer,
             .tool = PaintTool::Airbrush,
             .color = { 0, 255, 0, 255 },
-            .samples = { { 8.0, 8.0, 1.0F, 1.0 / 60.0 } }
+            .samples = {
+                { 3.0, 8.0, 1.0F, 1.0 / 60.0, false },
+                { 12.0, 8.0, 1.0F, 0.0, true }
+            }
         };
         airbrush.brush.radius = 2.0F;
         airbrush.brush.flow_per_second = 1.0F;
@@ -166,8 +204,18 @@ int main()
         Require(airbrush_workspace.ApplyPaintStroke(airbrush).status == PaintStrokeStatus::Applied,
             "A valid airbrush stroke must use the Core dab engine.");
         auto airbrush_pixels = airbrush_workspace.SnapshotRasterLayerPixels(airbrush_document, airbrush_layer);
-        Require(airbrush_pixels && ByteAt(*airbrush_pixels, 8, 8, 1) > 0,
-            "An airbrush stroke must change its center pixel.");
+        Require(airbrush_pixels
+            && ByteAt(*airbrush_pixels, 3, 8, 1) > 0
+            && ByteAt(*airbrush_pixels, 12, 8, 1) > 0
+            && ByteAt(*airbrush_pixels, 8, 8, 3) == 0,
+            "Airbrush segment breaks must restart dabs without painting a connecting chord.");
+        Require(airbrush_workspace.Undo(airbrush_document),
+            "Disconnected airbrush segments must remain one undo entry.");
+        airbrush_pixels = airbrush_workspace.SnapshotRasterLayerPixels(airbrush_document, airbrush_layer);
+        Require(airbrush_pixels
+            && ByteAt(*airbrush_pixels, 3, 8, 3) == 0
+            && ByteAt(*airbrush_pixels, 12, 8, 3) == 0,
+            "One undo must remove all disconnected airbrush segments.");
 
         std::cout << "OctoPaint application paint tests passed.\n";
         return EXIT_SUCCESS;

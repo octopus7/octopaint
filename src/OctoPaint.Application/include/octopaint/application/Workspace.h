@@ -431,6 +431,9 @@ namespace octopaint::application
         float pressure{ 1.0F };
         // Time since the preceding sample. The first sample may use zero.
         double elapsed_seconds{};
+        // Starts a disconnected stroke segment. Stabilizer and dab spacing
+        // state reset without creating a second history entry.
+        bool begins_new_segment{};
     };
 
     struct PaintStrokeRequest final

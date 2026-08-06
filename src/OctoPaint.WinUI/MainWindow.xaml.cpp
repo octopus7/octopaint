@@ -14,6 +14,7 @@
 #include <format>
 #include <limits>
 #include <ranges>
+#include <stdexcept>
 
 namespace winrt::OctoPaint::WinUI::implementation
 {
@@ -392,8 +393,13 @@ namespace winrt::OctoPaint::WinUI::implementation
         Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
     {
         UpdatePointerDevice(event_args);
+        if (paint_stroke_active_)
+        {
+            return;
+        }
 
-        auto const tool = editor_state_.Snapshot().ActiveTool();
+        auto const state = editor_state_.Snapshot();
+        auto const tool = state.ActiveTool();
         if (tool != octopaint::application::EditorTool::Pencil &&
             tool != octopaint::application::EditorTool::Airbrush)
         {
@@ -416,17 +422,54 @@ namespace winrt::OctoPaint::WinUI::implementation
             return;
         }
 
-        paint_stroke_active_ = CanvasInputSurface().CapturePointer(event_args.Pointer());
+        auto const color = state.ForegroundColor();
+        auto const& brush = state.Brush();
+        auto const& pressure = state.Pressure();
+        auto const& stabilizer = state.Stabilizer();
+        active_paint_request_.emplace(octopaint::application::PaintStrokeRequest{
+            .document_id = *snapshot.active_document_id,
+            .layer_id = *snapshot.active_layer_id,
+            .tool = tool == octopaint::application::EditorTool::Airbrush
+                ? octopaint::application::PaintTool::Airbrush
+                : octopaint::application::PaintTool::Pencil,
+            .color = { color.red, color.green, color.blue, color.alpha },
+            .brush = {
+                .radius = brush.size_pixels * 0.5F,
+                .flow_per_second = brush.flow,
+                .fixed_timestep_seconds = 1.0F / 60.0F,
+                .hardness = brush.hardness,
+                .spacing = brush.spacing,
+                .opacity = brush.opacity,
+                .pressure_affects_size = brush.pressure_affects_size,
+                .pressure_affects_opacity = brush.pressure_affects_opacity },
+            .pressure = {
+                .minimum_input = pressure.minimum_input,
+                .maximum_input = pressure.maximum_input,
+                .gamma = pressure.gamma },
+            .stabilizer = {
+                .enabled = stabilizer.enabled,
+                .strength = stabilizer.strength }
+        });
+
+        try
+        {
+            paint_stroke_active_ = CanvasInputSurface().CapturePointer(event_args.Pointer());
+        }
+        catch (...)
+        {
+            active_paint_request_.reset();
+            paint_stroke_active_ = false;
+            return;
+        }
         if (!paint_stroke_active_)
         {
+            active_paint_request_.reset();
             return;
         }
 
         paint_pointer_id_ = event_args.Pointer().PointerId();
-        paint_document_id_ = *snapshot.active_document_id;
-        paint_layer_id_ = *snapshot.active_layer_id;
         previous_pointer_timestamp_ = 0;
-        paint_samples_.clear();
+        paint_segment_break_pending_ = false;
         AppendPointerSamples(event_args);
         event_args.Handled(true);
     }
@@ -455,9 +498,23 @@ namespace winrt::OctoPaint::WinUI::implementation
         }
 
         AppendPointerSamples(event_args);
-        CompletePaintStroke(true);
-        CanvasInputSurface().ReleasePointerCapture(event_args.Pointer());
+        paint_stroke_active_ = false;
         event_args.Handled(true);
+        try
+        {
+            CanvasInputSurface().ReleasePointerCapture(event_args.Pointer());
+        }
+        catch (...)
+        {
+            try
+            {
+                CanvasInputSurface().ReleasePointerCaptures();
+            }
+            catch (...)
+            {
+            }
+        }
+        CompletePaintStroke(true);
     }
 
     void MainWindow::Canvas_PointerCanceled(
@@ -466,9 +523,23 @@ namespace winrt::OctoPaint::WinUI::implementation
     {
         if (paint_stroke_active_ && event_args.Pointer().PointerId() == paint_pointer_id_)
         {
-            CompletePaintStroke(false);
-            CanvasInputSurface().ReleasePointerCapture(event_args.Pointer());
+            paint_stroke_active_ = false;
             event_args.Handled(true);
+            try
+            {
+                CanvasInputSurface().ReleasePointerCapture(event_args.Pointer());
+            }
+            catch (...)
+            {
+                try
+                {
+                    CanvasInputSurface().ReleasePointerCaptures();
+                }
+                catch (...)
+                {
+                }
+            }
+            CompletePaintStroke(false);
         }
     }
 
@@ -478,7 +549,8 @@ namespace winrt::OctoPaint::WinUI::implementation
     {
         if (paint_stroke_active_ && event_args.Pointer().PointerId() == paint_pointer_id_)
         {
-            CompletePaintStroke(false);
+            paint_stroke_active_ = false;
+            CompletePaintStroke(true);
         }
     }
 
@@ -501,6 +573,11 @@ namespace winrt::OctoPaint::WinUI::implementation
     void MainWindow::AppendPointerSamples(
         Microsoft::UI::Xaml::Input::PointerRoutedEventArgs const& event_args)
     {
+        if (!active_paint_request_)
+        {
+            return;
+        }
+
         std::vector<Microsoft::UI::Input::PointerPoint> points;
         for (auto const& point : event_args.GetIntermediatePoints(CanvasInputSurface()))
         {
@@ -524,6 +601,8 @@ namespace winrt::OctoPaint::WinUI::implementation
                 static_cast<float>(point.Position().Y));
             if (!document_point)
             {
+                paint_segment_break_pending_ = !active_paint_request_->samples.empty();
+                previous_pointer_timestamp_ = timestamp;
                 continue;
             }
 
@@ -533,67 +612,34 @@ namespace winrt::OctoPaint::WinUI::implementation
                 pressure = std::clamp(point.Properties().Pressure(), 0.0F, 1.0F);
             }
 
-            auto const elapsed = previous_pointer_timestamp_ == 0
+            auto const elapsed = previous_pointer_timestamp_ == 0 || paint_segment_break_pending_
                 ? 0.0
                 : static_cast<double>(timestamp - previous_pointer_timestamp_) / 1'000'000.0;
-            paint_samples_.push_back({
+            active_paint_request_->samples.push_back({
                 .x = static_cast<double>(document_point->x),
                 .y = static_cast<double>(document_point->y),
                 .pressure = pressure,
-                .elapsed_seconds = elapsed });
+                .elapsed_seconds = elapsed,
+                .begins_new_segment = paint_segment_break_pending_ });
             previous_pointer_timestamp_ = timestamp;
+            paint_segment_break_pending_ = false;
         }
     }
 
     void MainWindow::CompletePaintStroke(bool const commit)
     {
-        if (!paint_stroke_active_)
-        {
-            return;
-        }
         paint_stroke_active_ = false;
-
-        if (commit && !paint_samples_.empty())
-        {
-            auto const state = editor_state_.Snapshot();
-            auto const color = state.ForegroundColor();
-            auto const& brush = state.Brush();
-            auto const& pressure = state.Pressure();
-            auto const& stabilizer = state.Stabilizer();
-
-            octopaint::application::PaintStrokeRequest request{
-                .document_id = paint_document_id_,
-                .layer_id = paint_layer_id_,
-                .tool = state.ActiveTool() == octopaint::application::EditorTool::Airbrush
-                    ? octopaint::application::PaintTool::Airbrush
-                    : octopaint::application::PaintTool::Pencil,
-                .color = { color.red, color.green, color.blue, color.alpha },
-                .brush = {
-                    .radius = brush.size_pixels * 0.5F,
-                    .flow_per_second = brush.flow,
-                    .fixed_timestep_seconds = 1.0F / 60.0F,
-                    .hardness = brush.hardness,
-                    .spacing = brush.spacing,
-                    .opacity = brush.opacity,
-                    .pressure_affects_size = brush.pressure_affects_size,
-                    .pressure_affects_opacity = brush.pressure_affects_opacity },
-                .pressure = {
-                    .minimum_input = pressure.minimum_input,
-                    .maximum_input = pressure.maximum_input,
-                    .gamma = pressure.gamma },
-                .stabilizer = {
-                    .enabled = stabilizer.enabled,
-                    .strength = stabilizer.strength },
-                .samples = std::move(paint_samples_) };
-            [[maybe_unused]] auto const result = workspace_.ApplyPaintStroke(request);
-            RefreshView();
-        }
-
-        paint_samples_.clear();
+        auto request = std::move(active_paint_request_);
+        active_paint_request_.reset();
         paint_pointer_id_ = 0;
         previous_pointer_timestamp_ = 0;
-        paint_document_id_ = {};
-        paint_layer_id_ = {};
+        paint_segment_break_pending_ = false;
+
+        if (commit && request && !request->samples.empty())
+        {
+            [[maybe_unused]] auto const result = workspace_.ApplyPaintStroke(*request);
+            RefreshView();
+        }
     }
 
     void MainWindow::ProjectToolOptionsToControls()
@@ -707,6 +753,10 @@ namespace winrt::OctoPaint::WinUI::implementation
         }
 
         DocumentTitleText().Visibility(Microsoft::UI::Xaml::Visibility::Collapsed);
+        if (pixels->row_stride > (std::numeric_limits<std::uint32_t>::max)())
+        {
+            throw std::overflow_error("The raster snapshot stride exceeds the D3D canvas pitch range.");
+        }
         [[maybe_unused]] auto const rendered = canvas_renderer_.Render({
             .width = pixels->size.width,
             .height = pixels->size.height,

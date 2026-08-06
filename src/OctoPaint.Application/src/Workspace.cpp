@@ -260,7 +260,14 @@ namespace octopaint::application
             return true;
         }
 
-        [[nodiscard]] std::vector<core::StylusSample> StabilizedSamples() const
+        struct ProcessedSample final
+        {
+            core::StylusSample sample;
+            double elapsed_seconds{};
+            bool begins_new_segment{};
+        };
+
+        [[nodiscard]] std::vector<ProcessedSample> StabilizedSamples() const
         {
             core::PressureMapper pressure_mapper({
                 request_.pressure.minimum_input,
@@ -272,10 +279,11 @@ namespace octopaint::application
                 request_.stabilizer.strength
             });
 
-            std::vector<core::StylusSample> samples;
-            samples.reserve(request_.samples.size() + 1);
-            for (auto const& input : request_.samples)
+            std::vector<ProcessedSample> samples;
+            samples.reserve(request_.samples.size() * 2);
+            for (std::size_t index = 0; index < request_.samples.size(); ++index)
             {
+                auto const& input = request_.samples[index];
                 if (!std::isfinite(input.x) || !std::isfinite(input.y)
                     || input.x < static_cast<double>(std::numeric_limits<std::int32_t>::min())
                     || input.x > static_cast<double>(std::numeric_limits<std::int32_t>::max())
@@ -285,17 +293,26 @@ namespace octopaint::application
                 {
                     throw std::invalid_argument("Paint samples must have finite coordinates and non-negative elapsed time.");
                 }
-                samples.push_back(stabilizer.Push({
+
+                auto const starts_segment = index == 0 || input.begins_new_segment;
+                if (index > 0 && input.begins_new_segment)
+                {
+                    if (auto const endpoint = stabilizer.Flush())
+                    {
+                        samples.push_back({ *endpoint, 0.0, false });
+                    }
+                }
+                samples.push_back({ stabilizer.Push({
                     {
                         static_cast<std::int32_t>(std::llround(input.x)),
                         static_cast<std::int32_t>(std::llround(input.y))
                     },
                     pressure_mapper.Map(input.pressure)
-                }));
+                }), starts_segment ? 0.0 : input.elapsed_seconds, starts_segment });
             }
             if (auto const endpoint = stabilizer.Flush())
             {
-                samples.push_back(*endpoint);
+                samples.push_back({ *endpoint, 0.0, false });
             }
             return samples;
         }
@@ -319,13 +336,15 @@ namespace octopaint::application
                 for (std::size_t index = 0; index < samples.size(); ++index)
                 {
                     auto segment = core::RasterizePencilSamples(
-                        index == 0 ? samples[index] : samples[index - 1], samples[index], color);
-                    if (index > 0 && !segment.empty())
+                        samples[index].begins_new_segment ? samples[index].sample : samples[index - 1].sample,
+                        samples[index].sample,
+                        color);
+                    if (!samples[index].begins_new_segment && !segment.empty())
                     {
                         segment.erase(segment.begin());
                     }
                     auto const pressure_opacity = request_.brush.pressure_affects_opacity
-                        ? samples[index].pressure : 1.0F;
+                        ? samples[index].sample.pressure : 1.0F;
                     for (auto& pixel : segment)
                     {
                         pixel.opacity = request_.brush.opacity * pressure_opacity;
@@ -347,12 +366,14 @@ namespace octopaint::application
             });
             for (std::size_t index = 0; index < samples.size(); ++index)
             {
-                auto const elapsed = index < request_.samples.size()
-                    ? request_.samples[index].elapsed_seconds : 0.0;
+                if (samples[index].begins_new_segment)
+                {
+                    accumulator.Reset();
+                }
                 auto dabs = accumulator.Advance(
-                    index == 0 ? samples[index] : samples[index - 1],
-                    samples[index],
-                    elapsed,
+                    samples[index].begins_new_segment ? samples[index].sample : samples[index - 1].sample,
+                    samples[index].sample,
+                    samples[index].elapsed_seconds,
                     color);
                 auto dab_pixels = core::RasterizeDabs(dabs);
                 pixels.insert(pixels.end(), dab_pixels.begin(), dab_pixels.end());
