@@ -167,3 +167,37 @@ Rust 코어
 ### 답변
 
 팀 상태를 직접 조회한 결과 `d3d_canvas`, `paint_application`, `winui_canvas_docking` 세 에이전트는 모두 `completed` 상태이며, 실제 실행 중인 에이전트는 기본 에이전트 `/root` 하나뿐이다. 완료된 에이전트 이름이 화면에 계속 보이더라도 실행 슬롯을 점유하는 활성 작업은 아니다. 화면에서 활성으로 표시된다면 실행 상태가 아니라 완료된 팀 구성 표시이거나 UI 갱신 지연이다.
+
+---
+
+## 질문 (23:10:36 KST)
+
+미구현 작업 검토해줘 문서만 보지말고 구현 상태를 분석해서
+
+### 답변
+
+실제 소스, 공개 API, WinUI 이벤트 연결, 렌더 경로, 테스트 범위와 Debug x64 빌드를 대조했다. 결론적으로 현재 저장소는 **편집기 기반과 Pencil/Airbrush·선택 도구의 세로 슬라이스는 동작하지만, 일반 이미지 편집기로서 필요한 데이터 안전성·레이어 합성·저장·편집 기능은 아직 대부분 미구현** 상태다. Debug x64 전체 솔루션은 경고 0개·오류 0개로 빌드됐고 헤드리스 테스트 8개는 모두 통과했다. 다만 테스트는 현재 구현된 좁은 범위만 검증한다.
+
+현재 실제로 연결된 범위는 다음과 같다.
+
+- 다중 문서 생성·활성화·닫기, 탭 투영, 문서별 revision과 Undo/Redo 백엔드
+- Raster/Group 레이어 트리와 추가·제거·순서 이동·이름·불투명도·표시·alpha lock·blend mode 속성 명령
+- 256x256 희소 타일 및 Copy-on-Write
+- Pencil/Airbrush 래스터화, 포인터 샘플 수집, 한 스트로크 단위 적용·Undo/Redo
+- 사각형·타원·자유형·다각형 선택 마스크의 replace 적용, Undo/Redo, marching-ants 경계 표시
+- WinUI 도구 모음, HSV/RGB 색 편집, 도킹/분리 패널, D3D11/Direct2D 캔버스
+
+코드 기준 우선순위가 높은 미구현·반쪽 구현은 다음과 같다.
+
+1. **P0 — 레이어 합성 경로가 없다.** 도메인에는 Raster와 Group 두 종류만 있고, 캔버스는 전체 레이어 트리를 합성하지 않고 활성 래스터 레이어 하나의 픽셀 스냅샷만 표시한다. 따라서 visibility, opacity, blend mode, 그룹 구조는 저장된 속성일 뿐 최종 화면 결과에 반영되지 않는다. Layers 패널도 placeholder 문구만 있다.
+2. **P0 — 선택 마스크가 페인팅을 제한하지 않는다.** 선택 마스크는 문서 상태와 경계 표시에는 쓰이지만 `PaintStrokeCommand`의 픽셀 필터링과 `ApplyPaintPixels` 경로에서는 조회되지 않는다. 선택 밖에도 그대로 그려지는 상태다. add/subtract/intersect, invert, clear, feather, expand, contract와 채널 저장/복원도 없다.
+3. **P0 — 저장·열기와 데이터 유실 방지가 없다.** `.ocp`, PNG, JPEG, PSD 코덱/API가 소스에 없고 Open/Save/Save As 메뉴에는 이벤트 핸들러가 없다. dirty 탭을 닫을 때도 save/discard/cancel 확인 없이 즉시 `CloseDocument`를 호출한다.
+4. **P0 — UI 명령 연결이 대부분 비어 있다.** 메뉴에서 실제 Click 핸들러가 연결된 편집 명령은 New뿐이다. 백엔드 Undo/Redo와 레이어 명령은 존재하지만 메뉴·단축키·Layers 패널에서 실행할 수 없다. Cut/Copy/Paste, 조정, 크기 변경, Select 명령, Blur, View 명령도 표시만 된다.
+5. **P1 — Move Layer 도구는 선택만 가능하고 캔버스 동작은 없다.** 포인터 입력 경로는 선택 도구 또는 Pencil/Airbrush만 처리하며 Move Layer는 반환된다. 현재 `MoveLayerCommand`는 레이어 트리의 부모/순서 이동 명령이지 픽셀 레이어의 문서 좌표 이동이 아니다.
+6. **P1 — 캔버스 탐색은 자동 fit만 있다.** 렌더러는 패널에 맞춘 사각형을 계산하지만 사용자 zoom, pan, reset-view 상태/API와 입력 처리가 없다. View 메뉴도 연결되지 않았다.
+7. **P1 — 편집 preview와 일부 옵션 전달이 끊겨 있다.** 페인트는 포인터를 놓을 때 한 번 적용되므로 스트로크 중 문서 preview가 없다. Stabilizer `smoothing` 값은 EditorState와 UI에 있지만 Paint 요청에는 필드가 없고 실제 엔진에는 `strength`만 전달된다.
+8. **P1/P2 — 핵심 엔진 묶음이 없다.** 레이어 마스크·채널·저장 선택, CPU/GPU 기준 합성기, 밝기/대비·색조/채도·Curves·Desaturate, Gaussian Blur, Crop·Canvas Resize·Image Resampling은 관련 구현 타입과 테스트가 없다.
+9. **P2 — 확장 도구와 워크플로가 없다.** Paint Brush, Eraser, Eyedropper, Bucket, Gradient, preset, symmetry, Clone/Healing, clipboard, 문서/레이어 복제, command registry, 사용자 단축키, 설정 영속화, Drag & Drop, Undo History snapshot/jump가 없다.
+10. **P3 — 고급 레이어와 교환 기능은 설계 전용이다.** Merge Down/Visible/Flatten, 다중 레이어 선택, Text/Fill/Effects/color tag/Linked·Smart Object와 PSD compatibility report는 소스 구현이 없다.
+
+초기 제공 단계로 환산하면 1단계와 2단계가 각각 부분 완료이고, 3단계(합성·채널·조정·필터·기하), 4단계(네이티브 저장·PNG/JPEG), 5단계(PSD)는 미착수에 가깝다. 따라서 다음 구현 순서는 **합성 스냅샷과 Layers UI → 선택/lock/mask 편집 제약 → Undo/Redo 및 dirty-close UI → `.ocp` 저장/열기 → PNG/JPEG → 이동·zoom/pan → 조정/필터/기하**가 적절하다. 이 순서가 현재 존재하는 도메인 코드를 실제 사용자 작업 흐름으로 연결하면서 데이터 유실 위험을 먼저 줄인다.
