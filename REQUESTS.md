@@ -736,3 +736,27 @@
 - 선택 표시는 이미지 픽셀을 변경하지 않는 렌더 오버레이로 유지한다.
 - 이번 구현의 선택 결합 방식은 교체로 한정하고 추가·빼기·교차 결합은 별도 검토 대상으로 유지한다.
 - Polygonal Lasso는 일반적인 반복 클릭 흐름과 키보드 확정을 함께 제공한다.
+
+---
+
+# 요청 시작: 2026-08-09 23:20:39 KST | 작업 완료: 2026-08-09 23:35:52 KST (소요 시간: 0시간 15분 13초)
+
+## 구현 내역
+
+- premultiplied BGRA8 버퍼를 대상으로 16개 기존 BlendMode를 모두 지원하는 결정적 CPU 합성기를 Core에 추가했다.
+- 입력 stride·버퍼 크기·opacity·premultiplied 불변식·overlap을 대상 변경 전에 검증하고 encoded-RGB 혼합 및 정수 반올림 정책을 공개 API에 문서화했다.
+- 전체 레이어 트리를 back-to-front로 합성하고 Group을 투명 중간 버퍼에서 격리 합성하는 `SnapshotCompositePixels` Application API를 추가했다.
+- Raster/Group visibility·opacity·blend mode가 최종 합성 결과에 반영되며 활성 레이어가 Group이어도 전체 문서 합성을 반환하도록 구현했다.
+- 선택 마스크가 있는 문서에서 Pencil/Airbrush 픽셀과 dirty bounds를 선택 내부로 제한하고, 일반 레이어 잠금 명령과 페인팅 거부 경로를 추가했다.
+- WinUI Layers 패널에 계층형 목록, 활성화, 표시 전환, 불투명도, 잠금, Raster/Group 추가 및 삭제를 연결했다.
+- Edit 메뉴의 Undo/Redo 상태·레이블·실행을 문서별 history와 연결하고 캔버스를 활성 레이어가 아닌 전체 합성 스냅샷으로 렌더링하도록 변경했다.
+- Normal·Multiply·Screen, 그룹 합성, 선택 제한, 잠금과 Undo를 검증하는 Application Composite 테스트 프로젝트를 솔루션과 Release 테스트 게이트에 추가했다.
+- Core 도메인 테스트에서 대표 합성 바이트, 16개 모드, premultiplied 불변식, opacity 0 no-op 및 오류 시 대상 무변경을 직접 검증했다.
+- 진행 현황 문서를 갱신하고 Debug/Release x64 전체 빌드, 두 구성의 9개 헤드리스 테스트 및 Debug 실행 파일 시작 스모크 테스트를 통과시켰다.
+
+## 결정 내용
+
+- 현재 색 정책은 profile 변환이나 linearization 없이 encoded RGB 값에서 혼합하며, CPU 결과를 향후 GPU 구현의 정확성 기준으로 사용한다.
+- LayerTree의 앞쪽 sibling을 아래쪽, 뒤쪽 sibling을 위쪽으로 해석하고 Group은 자식을 먼저 격리 합성한 뒤 Group opacity와 blend mode를 부모에 한 번 적용한다.
+- 현재 선택 rasterizer의 0/1 coverage 계약에서는 0인 픽셀만 제외하며, feathered 8-bit coverage 도입 시 opacity 가중 계약을 별도로 확장한다.
+- 저장·dirty-close 보호, 레이어 마스크·클리핑, GPU 합성 일치 검증은 이번 합성/UI 기반 작업과 분리된 후속 구현으로 유지한다.

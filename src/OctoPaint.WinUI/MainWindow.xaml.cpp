@@ -162,6 +162,161 @@ namespace winrt::OctoPaint::WinUI::implementation
         RefreshView();
     }
 
+    void MainWindow::Undo_Click(
+        [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
+        [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
+    {
+        CancelSelectionGesture(true);
+        [[maybe_unused]] auto const changed = workspace_.Undo();
+        RefreshView();
+    }
+
+    void MainWindow::Redo_Click(
+        [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
+        [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
+    {
+        CancelSelectionGesture(true);
+        [[maybe_unused]] auto const changed = workspace_.Redo();
+        RefreshView();
+    }
+
+    void MainWindow::AddRasterLayer_Click(
+        [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
+        [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
+    {
+        auto const snapshot = workspace_.Snapshot();
+        if (!snapshot.active_document_id)
+        {
+            return;
+        }
+
+        auto const document = std::ranges::find_if(snapshot.documents, [](auto const& candidate)
+        {
+            return candidate.is_active;
+        });
+        auto const raster_count = document == snapshot.documents.end()
+            ? std::size_t{}
+            : static_cast<std::size_t>(std::ranges::count_if(document->layers, [](auto const& layer)
+            {
+                return layer.kind == octopaint::application::LayerKind::Raster;
+            }));
+        workspace_.ExecuteCommand(
+            *snapshot.active_document_id,
+            std::make_unique<octopaint::application::AddRasterLayerCommand>(
+                std::format("Layer {}", raster_count + 1)));
+        RefreshView();
+    }
+
+    void MainWindow::AddGroupLayer_Click(
+        [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
+        [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
+    {
+        auto const snapshot = workspace_.Snapshot();
+        if (!snapshot.active_document_id)
+        {
+            return;
+        }
+
+        auto const document = std::ranges::find_if(snapshot.documents, [](auto const& candidate)
+        {
+            return candidate.is_active;
+        });
+        auto const group_count = document == snapshot.documents.end()
+            ? std::size_t{}
+            : static_cast<std::size_t>(std::ranges::count_if(document->layers, [](auto const& layer)
+            {
+                return layer.kind == octopaint::application::LayerKind::Group;
+            }));
+        workspace_.ExecuteCommand(
+            *snapshot.active_document_id,
+            std::make_unique<octopaint::application::AddGroupLayerCommand>(
+                std::format("Group {}", group_count + 1)));
+        RefreshView();
+    }
+
+    void MainWindow::DeleteLayer_Click(
+        [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
+        [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
+    {
+        auto const snapshot = workspace_.Snapshot();
+        if (!snapshot.active_document_id || !snapshot.active_layer_id)
+        {
+            return;
+        }
+
+        workspace_.ExecuteCommand(
+            *snapshot.active_document_id,
+            std::make_unique<octopaint::application::RemoveLayerCommand>(*snapshot.active_layer_id));
+        RefreshView();
+    }
+
+    void MainWindow::LayersList_SelectionChanged(
+        [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
+        [[maybe_unused]] Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const& event_args)
+    {
+        if (suppress_layer_events_)
+        {
+            return;
+        }
+
+        auto const selected_index = LayersList().SelectedIndex();
+        if (selected_index < 0 || static_cast<std::size_t>(selected_index) >= layer_ids_.size())
+        {
+            return;
+        }
+
+        if (workspace_.ActivateLayer(layer_ids_[static_cast<std::size_t>(selected_index)]))
+        {
+            RefreshView();
+        }
+    }
+
+    void MainWindow::LayerOpacity_ValueChanged(
+        Microsoft::UI::Xaml::Controls::NumberBox const& sender,
+        [[maybe_unused]] Microsoft::UI::Xaml::Controls::NumberBoxValueChangedEventArgs const& event_args)
+    {
+        if (suppress_layer_events_ || std::isnan(sender.Value()))
+        {
+            return;
+        }
+
+        auto const snapshot = workspace_.Snapshot();
+        if (!snapshot.active_document_id || !snapshot.active_layer_id)
+        {
+            return;
+        }
+
+        workspace_.ExecuteCommand(
+            *snapshot.active_document_id,
+            std::make_unique<octopaint::application::SetLayerOpacityCommand>(
+                *snapshot.active_layer_id,
+                static_cast<float>(sender.Value() / 100.0)));
+        RefreshView();
+    }
+
+    void MainWindow::ActiveLayerLock_Click(
+        [[maybe_unused]] Windows::Foundation::IInspectable const& sender,
+        [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
+    {
+        if (suppress_layer_events_)
+        {
+            return;
+        }
+
+        auto const snapshot = workspace_.Snapshot();
+        if (!snapshot.active_document_id || !snapshot.active_layer_id)
+        {
+            return;
+        }
+
+        workspace_.ExecuteCommand(
+            *snapshot.active_document_id,
+            std::make_unique<octopaint::application::SetLayerLockedCommand>(
+                *snapshot.active_layer_id,
+                IsChecked(ActiveLayerLockCheckBox())));
+        RefreshView();
+    }
+
     void MainWindow::ToolButton_Click(
         Windows::Foundation::IInspectable const& sender,
         [[maybe_unused]] Microsoft::UI::Xaml::RoutedEventArgs const& event_args)
@@ -1148,13 +1303,152 @@ namespace winrt::OctoPaint::WinUI::implementation
             "{} | Tool: {}",
             snapshot.status_message,
             winrt::to_string(ToolName(editor_state_.Snapshot().ActiveTool())))));
+        UndoMenuItem().IsEnabled(snapshot.active_commands.can_undo);
+        UndoMenuItem().Text(snapshot.active_commands.undo_label.empty()
+            ? L"Undo"
+            : winrt::to_hstring(std::format("Undo {}", snapshot.active_commands.undo_label)));
+        RedoMenuItem().IsEnabled(snapshot.active_commands.can_redo);
+        RedoMenuItem().Text(snapshot.active_commands.redo_label.empty()
+            ? L"Redo"
+            : winrt::to_hstring(std::format("Redo {}", snapshot.active_commands.redo_label)));
         RefreshDocumentTabs(snapshot);
+        RefreshLayers(snapshot);
         RefreshCanvas(snapshot);
+    }
+
+    void MainWindow::RefreshLayers(octopaint::application::WorkspaceSnapshot const& snapshot)
+    {
+        suppress_layer_events_ = true;
+        auto const items = LayersList().Items();
+        items.Clear();
+        layer_ids_.clear();
+        layer_visibilities_.clear();
+
+        auto const active_document = std::ranges::find_if(snapshot.documents, [](auto const& document)
+        {
+            return document.is_active;
+        });
+        if (active_document == snapshot.documents.end())
+        {
+            LayersList().SelectedIndex(-1);
+            LayersList().IsEnabled(false);
+            LayerOpacityNumberBox().Value(100.0);
+            LayerOpacityNumberBox().IsEnabled(false);
+            ActiveLayerLockCheckBox().IsChecked(false);
+            ActiveLayerLockCheckBox().IsEnabled(false);
+            suppress_layer_events_ = false;
+            return;
+        }
+
+        LayersList().IsEnabled(true);
+        std::int32_t active_index = -1;
+        for (auto const& layer : active_document->layers)
+        {
+            auto const layer_index = layer_ids_.size();
+            layer_ids_.push_back(layer.id);
+            layer_visibilities_.push_back(layer.visible);
+
+            Microsoft::UI::Xaml::Controls::StackPanel row;
+            row.Orientation(Microsoft::UI::Xaml::Controls::Orientation::Horizontal);
+            row.Spacing(6.0);
+
+            Microsoft::UI::Xaml::Controls::Border indent;
+            indent.Width(static_cast<double>(layer.depth) * 16.0);
+            row.Children().Append(indent);
+
+            Microsoft::UI::Xaml::Controls::Button visibility_button;
+            visibility_button.Width(42.0);
+            visibility_button.Padding(Microsoft::UI::Xaml::ThicknessHelper::FromLengths(4.0, 1.0, 4.0, 1.0));
+            visibility_button.Content(box_value(layer.visible ? L"On" : L"Off"));
+            Microsoft::UI::Xaml::Controls::ToolTipService::SetToolTip(
+                visibility_button,
+                box_value(layer.visible ? L"Hide layer" : L"Show layer"));
+            Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(
+                visibility_button,
+                winrt::to_hstring(std::format(
+                    "{} layer {}",
+                    layer.visible ? "Hide" : "Show",
+                    layer.name)));
+            visibility_button.Click([weak_this = get_weak(), layer_index](auto const&, auto const&)
+            {
+                if (auto const self = weak_this.get())
+                {
+                    self->ToggleLayerVisibility(layer_index);
+                }
+            });
+            row.Children().Append(visibility_button);
+
+            Microsoft::UI::Xaml::Controls::TextBlock kind_text;
+            kind_text.Width(42.0);
+            kind_text.Text(layer.kind == octopaint::application::LayerKind::Group ? L"Group" : L"Layer");
+            kind_text.Opacity(0.65);
+            kind_text.VerticalAlignment(Microsoft::UI::Xaml::VerticalAlignment::Center);
+            row.Children().Append(kind_text);
+
+            Microsoft::UI::Xaml::Controls::TextBlock name_text;
+            name_text.Text(winrt::to_hstring(layer.name));
+            name_text.TextTrimming(Microsoft::UI::Xaml::TextTrimming::CharacterEllipsis);
+            name_text.VerticalAlignment(Microsoft::UI::Xaml::VerticalAlignment::Center);
+            row.Children().Append(name_text);
+
+            Microsoft::UI::Xaml::Controls::ListViewItem item;
+            item.HorizontalContentAlignment(Microsoft::UI::Xaml::HorizontalAlignment::Stretch);
+            item.Content(row);
+            Microsoft::UI::Xaml::Automation::AutomationProperties::SetName(
+                item,
+                winrt::to_hstring(std::format(
+                    "{} {}, opacity {} percent",
+                    layer.kind == octopaint::application::LayerKind::Group ? "Group" : "Layer",
+                    layer.name,
+                    static_cast<int>(std::lround(layer.opacity * 100.0F)))));
+            items.Append(item);
+
+            if (active_document->active_layer_id && layer.id == *active_document->active_layer_id)
+            {
+                active_index = static_cast<std::int32_t>(layer_index);
+            }
+        }
+
+        LayersList().SelectedIndex(active_index);
+        if (active_index >= 0)
+        {
+            auto const& active_layer = active_document->layers[static_cast<std::size_t>(active_index)];
+            LayerOpacityNumberBox().Value(
+                static_cast<double>(std::lround(active_layer.opacity * 100.0F)));
+            LayerOpacityNumberBox().IsEnabled(true);
+            ActiveLayerLockCheckBox().IsChecked(active_layer.locked);
+            ActiveLayerLockCheckBox().IsEnabled(true);
+        }
+        else
+        {
+            LayerOpacityNumberBox().Value(100.0);
+            LayerOpacityNumberBox().IsEnabled(false);
+            ActiveLayerLockCheckBox().IsChecked(false);
+            ActiveLayerLockCheckBox().IsEnabled(false);
+        }
+        suppress_layer_events_ = false;
+    }
+
+    void MainWindow::ToggleLayerVisibility(std::size_t const layer_index)
+    {
+        auto const snapshot = workspace_.Snapshot();
+        if (!snapshot.active_document_id || layer_index >= layer_ids_.size() ||
+            layer_index >= layer_visibilities_.size())
+        {
+            return;
+        }
+
+        workspace_.ExecuteCommand(
+            *snapshot.active_document_id,
+            std::make_unique<octopaint::application::SetLayerVisibilityCommand>(
+                layer_ids_[layer_index],
+                !layer_visibilities_[layer_index]));
+        RefreshView();
     }
 
     void MainWindow::RefreshCanvas(octopaint::application::WorkspaceSnapshot const& snapshot)
     {
-        if (!snapshot.active_document_id || !snapshot.active_layer_id)
+        if (!snapshot.active_document_id)
         {
             canvas_renderer_.ClearDocument();
             ProjectSelectionToRenderer(snapshot);
@@ -1163,9 +1457,7 @@ namespace winrt::OctoPaint::WinUI::implementation
             return;
         }
 
-        auto const pixels = workspace_.SnapshotRasterLayerPixels(
-            *snapshot.active_document_id,
-            *snapshot.active_layer_id);
+        auto const pixels = workspace_.SnapshotCompositePixels(*snapshot.active_document_id);
         if (!pixels)
         {
             canvas_renderer_.ClearDocument();

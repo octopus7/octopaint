@@ -31,6 +31,38 @@ namespace winrt::OctoPaint::WinUI::implementation
             Windows::Foundation::IInspectable const& sender,
             Microsoft::UI::Xaml::RoutedEventArgs const& event_args);
 
+        void Undo_Click(
+            Windows::Foundation::IInspectable const& sender,
+            Microsoft::UI::Xaml::RoutedEventArgs const& event_args);
+
+        void Redo_Click(
+            Windows::Foundation::IInspectable const& sender,
+            Microsoft::UI::Xaml::RoutedEventArgs const& event_args);
+
+        void AddRasterLayer_Click(
+            Windows::Foundation::IInspectable const& sender,
+            Microsoft::UI::Xaml::RoutedEventArgs const& event_args);
+
+        void AddGroupLayer_Click(
+            Windows::Foundation::IInspectable const& sender,
+            Microsoft::UI::Xaml::RoutedEventArgs const& event_args);
+
+        void DeleteLayer_Click(
+            Windows::Foundation::IInspectable const& sender,
+            Microsoft::UI::Xaml::RoutedEventArgs const& event_args);
+
+        void LayersList_SelectionChanged(
+            Windows::Foundation::IInspectable const& sender,
+            Microsoft::UI::Xaml::Controls::SelectionChangedEventArgs const& event_args);
+
+        void LayerOpacity_ValueChanged(
+            Microsoft::UI::Xaml::Controls::NumberBox const& sender,
+            Microsoft::UI::Xaml::Controls::NumberBoxValueChangedEventArgs const& event_args);
+
+        void ActiveLayerLock_Click(
+            Windows::Foundation::IInspectable const& sender,
+            Microsoft::UI::Xaml::RoutedEventArgs const& event_args);
+
         void ToolButton_Click(
             Windows::Foundation::IInspectable const& sender,
             Microsoft::UI::Xaml::RoutedEventArgs const& event_args);
@@ -162,6 +194,8 @@ namespace winrt::OctoPaint::WinUI::implementation
 
         void RefreshView();
         void RefreshDocumentTabs(octopaint::application::WorkspaceSnapshot const& snapshot);
+        void RefreshLayers(octopaint::application::WorkspaceSnapshot const& snapshot);
+        void ToggleLayerVisibility(std::size_t layer_index);
         void SelectTool(Microsoft::UI::Xaml::Controls::Primitives::ToggleButton const& selected_button);
         void ProjectToolOptionsToControls();
         void CaptureToolOptionsFromControls();
@@ -207,6 +241,8 @@ namespace winrt::OctoPaint::WinUI::implementation
         octopaint::winui::DockablePanelController dockable_panels_;
         std::uint32_t next_document_number_{ 1 };
         std::vector<octopaint::application::DocumentId> tab_document_ids_;
+        std::vector<octopaint::application::LayerId> layer_ids_;
+        std::vector<bool> layer_visibilities_;
 
         HsvaColor editing_color_{};
         HsvaColor original_edit_color_{};
@@ -214,6 +250,7 @@ namespace winrt::OctoPaint::WinUI::implementation
         bool color_edit_active_{};
         bool suppress_color_events_{};
         bool suppress_tab_events_{};
+        bool suppress_layer_events_{};
         bool suppress_tool_option_events_{};
         bool stylus_detected_{};
         bool paint_stroke_active_{};

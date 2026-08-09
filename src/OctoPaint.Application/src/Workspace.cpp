@@ -1,5 +1,6 @@
 #include <octopaint/application/Workspace.h>
 
+#include <octopaint/core/Compositor.h>
 #include <octopaint/core/Document.h>
 #include <octopaint/core/Layer.h>
 #include <octopaint/core/Tools.h>
@@ -172,6 +173,125 @@ namespace octopaint::application::detail
         return left.Bounds() == right.Bounds()
             && std::ranges::equal(left.Coverage(), right.Coverage());
     }
+
+    struct CanvasPixelBuffer final
+    {
+        std::size_t row_stride{};
+        std::vector<std::byte> pixels;
+    };
+
+    [[nodiscard]] CanvasPixelBuffer MakeCanvasPixelBuffer(core::CanvasSize const size)
+    {
+        auto const width = static_cast<std::size_t>(size.width);
+        auto const height = static_cast<std::size_t>(size.height);
+        if (width > std::numeric_limits<std::size_t>::max() / core::Rgba8BytesPerPixel)
+        {
+            throw std::length_error("Composite snapshot row stride exceeds addressable memory.");
+        }
+        auto const row_stride = width * core::Rgba8BytesPerPixel;
+        if (height != 0 && row_stride > std::numeric_limits<std::size_t>::max() / height)
+        {
+            throw std::length_error("Composite snapshot exceeds addressable memory.");
+        }
+        return {
+            .row_stride = row_stride,
+            .pixels = std::vector<std::byte>(row_stride * height)
+        };
+    }
+
+    [[nodiscard]] CanvasPixelBuffer SnapshotRasterPixels(
+        core::RasterLayer const& layer,
+        core::CanvasSize const size)
+    {
+        auto snapshot = MakeCanvasPixelBuffer(size);
+        for (auto const key : layer.Tiles().Keys())
+        {
+            if (key.level != 0)
+            {
+                continue;
+            }
+            auto const payload = layer.Tiles().Read(key);
+            if (!payload)
+            {
+                continue;
+            }
+            auto const source = payload->Pixels();
+            auto const origin_x = static_cast<std::int64_t>(key.x) * core::TileExtent;
+            auto const origin_y = static_cast<std::int64_t>(key.y) * core::TileExtent;
+            for (std::uint32_t local_y = 0; local_y < core::TileExtent; ++local_y)
+            {
+                auto const canvas_y = origin_y + local_y;
+                if (canvas_y < 0 || canvas_y >= static_cast<std::int64_t>(size.height))
+                {
+                    continue;
+                }
+                for (std::uint32_t local_x = 0; local_x < core::TileExtent; ++local_x)
+                {
+                    auto const canvas_x = origin_x + local_x;
+                    if (canvas_x < 0 || canvas_x >= static_cast<std::int64_t>(size.width))
+                    {
+                        continue;
+                    }
+                    auto const source_index =
+                        (static_cast<std::size_t>(local_y) * core::TileExtent + local_x)
+                        * core::Rgba8BytesPerPixel;
+                    auto const destination_index = static_cast<std::size_t>(canvas_y) * snapshot.row_stride
+                        + static_cast<std::size_t>(canvas_x) * core::Rgba8BytesPerPixel;
+                    snapshot.pixels[destination_index] = source[source_index + 2];
+                    snapshot.pixels[destination_index + 1] = source[source_index + 1];
+                    snapshot.pixels[destination_index + 2] = source[source_index];
+                    snapshot.pixels[destination_index + 3] = source[source_index + 3];
+                }
+            }
+        }
+        return snapshot;
+    }
+
+    void CompositeLayers(
+        std::span<std::unique_ptr<core::Layer> const> const layers,
+        core::CanvasSize const size,
+        CanvasPixelBuffer& destination)
+    {
+        // LayerTree order is back-to-front: later siblings are painted over
+        // earlier siblings. Groups are isolated into a transparent buffer so
+        // group visibility and opacity apply to their flattened contribution.
+        for (auto const& layer : layers)
+        {
+            auto const& properties = layer->Properties();
+            if (!properties.visible || properties.opacity <= 0.0F)
+            {
+                continue;
+            }
+
+            CanvasPixelBuffer source;
+            if (layer->Kind() == core::LayerKind::Raster)
+            {
+                source = SnapshotRasterPixels(static_cast<core::RasterLayer const&>(*layer), size);
+            }
+            else
+            {
+                source = MakeCanvasPixelBuffer(size);
+                CompositeLayers(
+                    static_cast<core::GroupLayer const&>(*layer).Children(),
+                    size,
+                    source);
+            }
+
+            auto const result = core::CompositePremultipliedBgra8(
+                destination.pixels,
+                destination.row_stride,
+                source.pixels,
+                source.row_stride,
+                size.width,
+                size.height,
+                properties.opacity,
+                properties.blend_mode);
+            if (result != core::CompositeResult::Succeeded)
+            {
+                throw std::runtime_error(std::string{ core::CompositeResultMessage(result) });
+            }
+        }
+    }
 }
 
 namespace octopaint::application
@@ -214,6 +334,17 @@ namespace octopaint::application
                     || static_cast<std::uint64_t>(pixel.position.x) >= canvas_size_.width
                     || static_cast<std::uint64_t>(pixel.position.y) >= canvas_size_.height;
             }), pixels.end());
+
+            // An empty selection means the entire canvas is editable. Current
+            // selection rasterizers expose binary 0/1 coverage, so retain only
+            // pixels selected by the document mask.
+            if (!state.selection.Empty())
+            {
+                pixels.erase(std::remove_if(pixels.begin(), pixels.end(), [&state](core::PaintPixel const& pixel)
+                {
+                    return state.selection.CoverageAt(pixel.position) == 0;
+                }), pixels.end());
+            }
 
             if (!pixels.empty())
             {
@@ -951,6 +1082,51 @@ namespace octopaint::application
         layer->SetVisible(previous_visibility_);
     }
 
+    SetLayerLockedCommand::SetLayerLockedCommand(LayerId const id, bool const locked)
+        : id_(id), locked_(locked)
+    {
+        if (!id_)
+        {
+            throw std::invalid_argument("A layer ID must be non-zero.");
+        }
+    }
+
+    std::string SetLayerLockedCommand::Label() const
+    {
+        return "Set layer lock";
+    }
+
+    void SetLayerLockedCommand::Execute(DocumentMutation& document)
+    {
+        auto& state = *static_cast<detail::LayerDocumentState*>(document.layers_);
+        auto* const layer = detail::Find(state, id_);
+        if (!layer)
+        {
+            throw std::out_of_range("The layer does not exist.");
+        }
+        if (!captured_previous_locked_)
+        {
+            previous_locked_ = layer->Properties().locked;
+            captured_previous_locked_ = true;
+        }
+        layer->SetLocked(locked_);
+    }
+
+    void SetLayerLockedCommand::Undo(DocumentMutation& document)
+    {
+        if (!captured_previous_locked_)
+        {
+            throw std::logic_error("Cannot undo a lock command that has not executed.");
+        }
+        auto& state = *static_cast<detail::LayerDocumentState*>(document.layers_);
+        auto* const layer = detail::Find(state, id_);
+        if (!layer)
+        {
+            throw std::out_of_range("The layer does not exist.");
+        }
+        layer->SetLocked(previous_locked_);
+    }
+
     SetLayerAlphaLockedCommand::SetLayerAlphaLockedCommand(
         LayerId const id,
         bool const alpha_locked)
@@ -1429,6 +1605,27 @@ namespace octopaint::application
             }
         }
         return snapshot;
+    }
+
+    std::optional<CompositePixelSnapshot> Workspace::SnapshotCompositePixels(
+        DocumentId const document_id) const
+    {
+        auto const* const open_document = impl_->Find(document_id);
+        if (!open_document)
+        {
+            return std::nullopt;
+        }
+
+        auto const size = open_document->document.Size();
+        auto pixels = detail::MakeCanvasPixelBuffer(size);
+        detail::CompositeLayers(open_document->layers.tree.Roots(), size, pixels);
+        return CompositePixelSnapshot{
+            .document_id = document_id,
+            .size = { size.width, size.height },
+            .revision = open_document->current_revision,
+            .row_stride = pixels.row_stride,
+            .pixels_bgra_premultiplied = std::move(pixels.pixels)
+        };
     }
 
     SelectionResult Workspace::ApplySelectionGesture(SelectionGestureRequest const& request)

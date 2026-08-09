@@ -164,8 +164,8 @@
                 <MenuFlyoutItem Text="Exit" />
             </MenuBarItem>
             <MenuBarItem Title="Edit">
-                <MenuFlyoutItem Text="Undo" />
-                <MenuFlyoutItem Text="Redo" />
+                <MenuFlyoutItem x:Name="UndoMenuItem" Text="Undo" Click="Undo_Click" />
+                <MenuFlyoutItem x:Name="RedoMenuItem" Text="Redo" Click="Redo_Click" />
                 <MenuFlyoutSeparator />
                 <MenuFlyoutItem Text="Cut" />
                 <MenuFlyoutItem Text="Copy" />
@@ -177,9 +177,10 @@
                 <MenuFlyoutItem Text="Image Size…" />
             </MenuBarItem>
             <MenuBarItem Title="Layer">
-                <MenuFlyoutItem Text="New Layer" />
+                <MenuFlyoutItem Text="New Layer" Click="AddRasterLayer_Click" />
+                <MenuFlyoutItem Text="New Group" Click="AddGroupLayer_Click" />
                 <MenuFlyoutItem Text="Duplicate Layer" />
-                <MenuFlyoutItem Text="Delete Layer" />
+                <MenuFlyoutItem Text="Delete Layer" Click="DeleteLayer_Click" />
             </MenuBarItem>
             <MenuBarItem Title="Select">
                 <MenuFlyoutItem Text="Select All" />
@@ -346,8 +347,14 @@
             </Grid>
 
             <ContentControl x:Name="LayersDockHost" Grid.Column="2">
-                <Border x:Name="LayersPanel" Padding="16" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                    <StackPanel Spacing="8">
+                <Border x:Name="LayersPanel" Padding="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <Grid RowSpacing="8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -363,8 +370,47 @@
                                 ToolTipService.ToolTip="Float or dock the Layers panel"
                                 AutomationProperties.Name="Float Layers panel" />
                         </Grid>
-                        <TextBlock Text="Application state will be projected here." Opacity="0.65" TextWrapping="Wrap" />
-                    </StackPanel>
+                        <Grid Grid.Row="1" ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <NumberBox
+                                x:Name="LayerOpacityNumberBox"
+                                Header="Opacity (%)"
+                                Minimum="0"
+                                Maximum="100"
+                                SmallChange="1"
+                                SpinButtonPlacementMode="Compact"
+                                ValueChanged="LayerOpacity_ValueChanged"
+                                AutomationProperties.Name="Active layer opacity percent" />
+                            <CheckBox
+                                x:Name="ActiveLayerLockCheckBox"
+                                Grid.Column="1"
+                                Content="Lock"
+                                VerticalAlignment="Bottom"
+                                Margin="0,0,0,7"
+                                Click="ActiveLayerLock_Click"
+                                AutomationProperties.Name="Lock active layer" />
+                        </Grid>
+                        <ListView
+                            x:Name="LayersList"
+                            Grid.Row="2"
+                            MinHeight="120"
+                            HorizontalContentAlignment="Stretch"
+                            SelectionChanged="LayersList_SelectionChanged"
+                            AutomationProperties.Name="Document layers" />
+                        <Grid Grid.Row="3" ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Button Content="+ Layer" Click="AddRasterLayer_Click" HorizontalAlignment="Stretch" AutomationProperties.Name="Add raster layer" />
+                            <Button Grid.Column="1" Content="+ Group" Click="AddGroupLayer_Click" HorizontalAlignment="Stretch" AutomationProperties.Name="Add layer group" />
+                            <Button Grid.Column="2" Content="Delete" Click="DeleteLayer_Click" AutomationProperties.Name="Delete active layer" />
+                        </Grid>
+                    </Grid>
                 </Border>
             </ContentControl>
         </Grid>

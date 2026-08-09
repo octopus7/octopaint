@@ -138,6 +138,7 @@ namespace octopaint::application
         friend class RenameLayerCommand;
         friend class SetLayerOpacityCommand;
         friend class SetLayerVisibilityCommand;
+        friend class SetLayerLockedCommand;
         friend class SetLayerAlphaLockedCommand;
         friend class SetLayerBlendModeCommand;
         friend class PaintStrokeCommand;
@@ -313,6 +314,22 @@ namespace octopaint::application
         bool alpha_locked_{};
         bool previous_alpha_locked_{};
         bool captured_previous_alpha_locked_{};
+    };
+
+    class SetLayerLockedCommand final : public DocumentCommand
+    {
+    public:
+        SetLayerLockedCommand(LayerId id, bool locked);
+
+        [[nodiscard]] std::string Label() const override;
+        void Execute(DocumentMutation& document) override;
+        void Undo(DocumentMutation& document) override;
+
+    private:
+        LayerId id_;
+        bool locked_{};
+        bool previous_locked_{};
+        bool captured_previous_locked_{};
     };
 
     class SetLayerBlendModeCommand final : public DocumentCommand
@@ -494,6 +511,18 @@ namespace octopaint::application
         std::vector<std::byte> pixels_bgra_premultiplied;
     };
 
+    // A detached, tightly packed canvas-sized BGRA8 premultiplied snapshot of
+    // the complete visible layer tree. Groups, visibility, opacity and blend
+    // modes are resolved before the snapshot crosses the frontend boundary.
+    struct CompositePixelSnapshot final
+    {
+        DocumentId document_id;
+        CanvasSize size;
+        std::uint64_t revision{};
+        std::size_t row_stride{};
+        std::vector<std::byte> pixels_bgra_premultiplied;
+    };
+
     enum class SelectionGestureKind : std::uint8_t
     {
         Rectangular,
@@ -604,6 +633,8 @@ namespace octopaint::application
         [[nodiscard]] std::optional<RasterPixelSnapshot> SnapshotRasterLayerPixels(
             DocumentId document_id,
             LayerId layer_id) const;
+        [[nodiscard]] std::optional<CompositePixelSnapshot> SnapshotCompositePixels(
+            DocumentId document_id) const;
         [[nodiscard]] SelectionResult ApplySelectionGesture(
             SelectionGestureRequest const& request);
         [[nodiscard]] std::optional<SelectionBoundarySnapshot> SnapshotSelectionBoundary(

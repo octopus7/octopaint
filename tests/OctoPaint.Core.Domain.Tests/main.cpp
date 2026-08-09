@@ -1,6 +1,8 @@
+#include <octopaint/core/Compositor.h>
 #include <octopaint/core/Layer.h>
 #include <octopaint/core/Tile.h>
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
@@ -208,6 +210,132 @@ namespace
             "Removing a missing layer must return a deterministic error.");
         Require(tree.Validate().empty(), "A tree produced by validated operations must pass deterministic pre-order validation.");
     }
+
+    void TestCompositorRepresentativeBytes()
+    {
+        constexpr std::array<std::byte, 4> source{
+            std::byte{ 20 }, std::byte{ 60 }, std::byte{ 100 }, std::byte{ 255 }
+        };
+
+        auto normal = std::array{
+            std::byte{ 40 }, std::byte{ 80 }, std::byte{ 120 }, std::byte{ 255 }
+        };
+        Require(CompositePremultipliedBgra8(
+                normal, 4, source, 4, 1, 1, 0.5F, BlendMode::Normal)
+                == CompositeResult::Succeeded,
+            "Normal compositing must accept a valid opaque BGRA8 pixel.");
+        Require(normal == std::array{
+                std::byte{ 30 }, std::byte{ 70 }, std::byte{ 110 }, std::byte{ 255 }
+            },
+            "Normal compositing must produce deterministic half-opacity bytes.");
+
+        constexpr std::array<std::byte, 4> middle_gray{
+            std::byte{ 128 }, std::byte{ 128 }, std::byte{ 128 }, std::byte{ 255 }
+        };
+        auto multiply = middle_gray;
+        Require(CompositePremultipliedBgra8(
+                multiply, 4, middle_gray, 4, 1, 1, 1.0F, BlendMode::Multiply)
+                == CompositeResult::Succeeded,
+            "Multiply compositing must accept valid opaque pixels.");
+        Require(multiply == std::array{
+                std::byte{ 64 }, std::byte{ 64 }, std::byte{ 64 }, std::byte{ 255 }
+            },
+            "Multiply must round encoded mid-gray to deterministic quarter-intensity bytes.");
+
+        auto screen = middle_gray;
+        Require(CompositePremultipliedBgra8(
+                screen, 4, middle_gray, 4, 1, 1, 1.0F, BlendMode::Screen)
+                == CompositeResult::Succeeded,
+            "Screen compositing must accept valid opaque pixels.");
+        Require(screen == std::array{
+                std::byte{ 192 }, std::byte{ 192 }, std::byte{ 192 }, std::byte{ 255 }
+            },
+            "Screen must round encoded mid-gray to deterministic three-quarter-intensity bytes.");
+    }
+
+    void TestEveryCompositorBlendMode()
+    {
+        constexpr std::array blend_modes{
+            BlendMode::Normal,
+            BlendMode::Multiply,
+            BlendMode::Screen,
+            BlendMode::Overlay,
+            BlendMode::Darken,
+            BlendMode::Lighten,
+            BlendMode::ColorDodge,
+            BlendMode::ColorBurn,
+            BlendMode::SoftLight,
+            BlendMode::HardLight,
+            BlendMode::Difference,
+            BlendMode::Exclusion,
+            BlendMode::Hue,
+            BlendMode::Saturation,
+            BlendMode::Color,
+            BlendMode::Luminosity
+        };
+        constexpr std::array<std::byte, 4> source{
+            std::byte{ 40 }, std::byte{ 80 }, std::byte{ 120 }, std::byte{ 160 }
+        };
+
+        for (auto const blend_mode : blend_modes)
+        {
+            auto destination = std::array{
+                std::byte{ 64 }, std::byte{ 48 }, std::byte{ 32 }, std::byte{ 128 }
+            };
+            Require(CompositePremultipliedBgra8(
+                    destination, 4, source, 4, 1, 1, 0.75F, blend_mode)
+                    == CompositeResult::Succeeded,
+                "Every declared blend mode must composite a valid pixel successfully.");
+
+            auto const alpha = std::to_integer<unsigned int>(destination[3]);
+            Require(std::to_integer<unsigned int>(destination[0]) <= alpha
+                    && std::to_integer<unsigned int>(destination[1]) <= alpha
+                    && std::to_integer<unsigned int>(destination[2]) <= alpha,
+                "Every blend mode must preserve the premultiplied BGRA8 invariant.");
+        }
+    }
+
+    void TestCompositorValidationIsAtomic()
+    {
+        constexpr std::array<std::byte, 4> valid_source{
+            std::byte{ 8 }, std::byte{ 16 }, std::byte{ 24 }, std::byte{ 32 }
+        };
+        constexpr std::array<std::byte, 4> original_destination{
+            std::byte{ 20 }, std::byte{ 30 }, std::byte{ 40 }, std::byte{ 64 }
+        };
+
+        auto zero_opacity = original_destination;
+        Require(CompositePremultipliedBgra8(
+                zero_opacity, 4, valid_source, 4, 1, 1, 0.0F, BlendMode::Normal)
+                == CompositeResult::Succeeded
+                && zero_opacity == original_destination,
+            "Zero opacity must be a successful byte-for-byte no-op.");
+
+        auto invalid_opacity = original_destination;
+        Require(CompositePremultipliedBgra8(
+                invalid_opacity, 4, valid_source, 4, 1, 1,
+                std::nanf(""), BlendMode::Normal) == CompositeResult::InvalidOpacity
+                && invalid_opacity == original_destination,
+            "Invalid opacity must be rejected without modifying destination.");
+
+        constexpr std::array<std::byte, 4> non_premultiplied_source{
+            std::byte{ 129 }, std::byte{ 0 }, std::byte{ 0 }, std::byte{ 128 }
+        };
+        auto non_premultiplied = original_destination;
+        Require(CompositePremultipliedBgra8(
+                non_premultiplied, 4, non_premultiplied_source, 4, 1, 1,
+                1.0F, BlendMode::Normal) == CompositeResult::SourceIsNotPremultiplied
+                && non_premultiplied == original_destination,
+            "A non-premultiplied source must be rejected without modifying destination.");
+
+        auto too_small = std::array{ std::byte{ 20 }, std::byte{ 30 }, std::byte{ 40 } };
+        auto const original_too_small = too_small;
+        Require(CompositePremultipliedBgra8(
+                too_small, 4, valid_source, 4, 1, 1, 1.0F, BlendMode::Normal)
+                == CompositeResult::DestinationBufferTooSmall
+                && too_small == original_too_small,
+            "A too-small destination must be rejected without modifying its available bytes.");
+    }
 }
 
 int main()
@@ -217,6 +345,9 @@ int main()
         TestSparseTileStore();
         TestLayerProperties();
         TestOrderedNestedLayerTree();
+        TestCompositorRepresentativeBytes();
+        TestEveryCompositorBlendMode();
+        TestCompositorValidationIsAtomic();
         std::cout << "OctoPaint Core domain tests passed.\n";
         return EXIT_SUCCESS;
     }

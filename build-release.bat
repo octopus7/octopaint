@@ -16,6 +16,7 @@ set "APPLICATION_TEST_EXE=%SCRIPT_DIR%out\bin\x64\Release\OctoPaint.Application.
 set "DOMAIN_TEST_EXE=%SCRIPT_DIR%out\bin\x64\Release\OctoPaint.Core.Domain.Tests\OctoPaint.Core.Domain.Tests.exe"
 set "TOOLS_TEST_EXE=%SCRIPT_DIR%out\bin\x64\Release\OctoPaint.Tools.Tests\OctoPaint.Tools.Tests.exe"
 set "APPLICATION_LAYER_TEST_EXE=%SCRIPT_DIR%out\bin\x64\Release\OctoPaint.Application.Layer.Tests\OctoPaint.Application.Layer.Tests.exe"
+set "APPLICATION_COMPOSITE_TEST_EXE=%SCRIPT_DIR%out\bin\x64\Release\OctoPaint.Application.Composite.Tests\OctoPaint.Application.Composite.Tests.exe"
 set "APPLICATION_EDITOR_STATE_TEST_EXE=%SCRIPT_DIR%out\bin\x64\Release\OctoPaint.Application.EditorState.Tests\OctoPaint.Application.EditorState.Tests.exe"
 set "APPLICATION_PAINT_TEST_EXE=%SCRIPT_DIR%out\bin\x64\Release\OctoPaint.Application.Paint.Tests\OctoPaint.Application.Paint.Tests.exe"
 set "APPLICATION_SELECTION_TEST_EXE=%SCRIPT_DIR%out\bin\x64\Release\OctoPaint.Application.Selection.Tests\OctoPaint.Application.Selection.Tests.exe"
@@ -91,6 +92,9 @@ if errorlevel 1 (call :fail "OctoPaint.Tools.Tests failed." & exit /b 1)
 if not exist "%APPLICATION_LAYER_TEST_EXE%" (call :fail "Test executable was not produced: %APPLICATION_LAYER_TEST_EXE%" & exit /b 1)
 "%APPLICATION_LAYER_TEST_EXE%"
 if errorlevel 1 (call :fail "OctoPaint.Application.Layer.Tests failed." & exit /b 1)
+if not exist "%APPLICATION_COMPOSITE_TEST_EXE%" (call :fail "Test executable was not produced: %APPLICATION_COMPOSITE_TEST_EXE%" & exit /b 1)
+"%APPLICATION_COMPOSITE_TEST_EXE%"
+if errorlevel 1 (call :fail "OctoPaint.Application.Composite.Tests failed." & exit /b 1)
 if not exist "%APPLICATION_EDITOR_STATE_TEST_EXE%" (call :fail "Test executable was not produced: %APPLICATION_EDITOR_STATE_TEST_EXE%" & exit /b 1)
 "%APPLICATION_EDITOR_STATE_TEST_EXE%"
 if errorlevel 1 (call :fail "OctoPaint.Application.EditorState.Tests failed." & exit /b 1)
