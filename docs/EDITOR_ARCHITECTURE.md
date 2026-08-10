@@ -8,7 +8,9 @@
 - 1차 지원 파일은 `.ocp`, PNG, JPEG이며 PSD 읽기/쓰기는 호환성 계층으로 제공한다.
 - UI는 WinUI 3/C++23으로 시작하되, 편집기 코어와 렌더러는 특정 UI 프레임워크에 의존하지 않는다.
 
-## 2. 의존성 원칙
+## 2. 의존성 원칙과 목표 모듈 구조
+
+아래 다이어그램과 모듈 표는 **목표 구조**다. 현재 구현에서는 D3D11/D2D 렌더러가 `OctoPaint.WinUI` 프로젝트 안에서 `SwapChainPanel`을 직접 사용하며, `OctoPaint.Render.Abstractions`, `OctoPaint.Render.D3D11`, `OctoPaint.Codecs.*`는 아직 별도 프로젝트로 존재하지 않는다. 현재 배치와 목표 경계를 구분해 해석한다.
 
 ```text
 OctoPaint (교체 가능한 WinUI 3 실행 프런트엔드)
@@ -33,7 +35,7 @@ OctoPaint.Render.D3D11   OctoPaint.Codecs.*
 - 코덱은 `DocumentReader`/`DocumentWriter` 포트를 구현한다. PSD SDK나 외부 라이브러리 타입을 공용 헤더에 노출하지 않는다.
 - 경계를 넘는 식별자는 포인터가 아니라 세대 번호를 포함한 강타입 ID를 사용한다.
 
-## 3. 모듈 책임
+## 3. 목표 모듈 책임
 
 | 모듈 | 책임 |
 |---|---|

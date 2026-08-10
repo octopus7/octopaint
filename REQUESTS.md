@@ -780,3 +780,10 @@
 - 최우선 P0는 일반 명령·history의 실패 원자성, 기존 `docs/FILE_FORMATS.md`를 따르는 `.ocp` 영속성, Open/Save/Save As와 dirty-close 보호 순으로 정했다.
 - 후속 P1은 viewport와 실제 Move Layer 픽셀 이동, 페인팅 preview·Airbrush timer·Smoothing 연결, 기본 편집 명령, Windows CI·패키지 검증, 합성 성능·GPU 일치 검증 순으로 정했다.
 - 이번 환경에서는 정식 MSVC 솔루션 빌드, WinUI GUI 실행, MSI 설치를 검증하지 않았으며 기존 Windows 검증 기록과 이번 WSL headless 결과를 문서에서 명확히 구분했다.
+
+### 병렬 감사 완료 결과 후속 반영 — 2026-08-10 18:39:17 KST
+
+- 3개 에이전트의 전체 완료 결과를 다시 대조해 `LayerTree::Move`의 subtree 유실 가능성, `MarkSaved`의 exact-revision 문제, 무제한 history와 진단·검증 공백을 `PROGRESS.md`에 보강했다.
+- portable 9개 테스트의 ASan+UBSan 통과, XML 16개 구조 파싱 통과와 함께 `-Werror` missing-field-initializer 실패를 성공 결과와 분리 기록했다.
+- 영어·한국어·일본어 README에 9개 테스트 전체 실행 방법과 릴리스 배치가 실제 앱·ZIP·MSI를 smoke 검증하지 않는 한계를 동기화했다.
+- `docs/ARCHITECTURE.md`와 `docs/EDITOR_ARCHITECTURE.md`에서 현재 WinUI 내부 renderer 배치와 향후 분리 renderer·codec 모듈 목표를 명확히 구분했다.

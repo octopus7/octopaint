@@ -18,7 +18,8 @@ OctoPaint.Core (platform-independent domain)
 - `OctoPaint.Application` exposes commands and immutable snapshots using standard C++ value types. It owns orchestration but no widgets or windows.
 - `OctoPaint.WinUI` is an adapter. XAML, `winrt::*`, HWND values, and Windows App SDK types stay inside this project.
 - A future frontend links `OctoPaint.Application` and translates its snapshots into its own controls.
-- Rendering will be introduced behind a separate renderer boundary. A frontend may host a native surface, but document and tool behavior must not depend on that surface type.
+- The current D3D11/D2D renderer is compiled inside `OctoPaint.WinUI` and hosts a `SwapChainPanel`. The target architecture moves rendering behind a separate renderer boundary; until then, this is an implementation placement rather than a completed replaceable-renderer module.
+- A frontend may host a native surface, but document and tool behavior must not depend on that surface type.
 - Calls across boundaries should describe user intent, such as `NewDocument`, rather than control events, such as `NewButtonClicked`.
 
 ## Replacement procedure

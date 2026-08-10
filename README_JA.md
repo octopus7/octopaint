@@ -38,7 +38,7 @@ OctoPaint.Core (プラットフォーム非依存のドキュメントドメイ�
 - `src/OctoPaint.Core`: プラットフォーム非依存のドキュメントモデル
 - `src/OctoPaint.Application`: UI非依存のコマンドと不変スナップショット
 - `src/OctoPaint.WinUI`: 交換可能なWinUI 3アダプターと`OctoPaint`実行ファイル
-- `tests/OctoPaint.Core.Tests`: アプリケーションとコアのヘッドレス検証
+- `tests`: Core、Application、ドメイン、ツール、レイヤー、合成、エディター状態、ペイント、選択を検証する9個のヘッドレステスト実行ファイル
 - `docs`: アーキテクチャ、製品、エディター、ファイル形式の設計文書
 
 ## 設計文書
@@ -56,10 +56,18 @@ Visual Studio 2022で`OctoPaint.sln`を開いて`x64`プラットフォームを
 & "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" .\OctoPaint.sln /restore /m /p:Configuration=Debug /p:Platform=x64
 ```
 
-ヘッドレス検証は次のように実行します。
+ビルド後、9個すべてのヘッドレス検証を次のように実行します。
 
 ```powershell
-.\out\bin\x64\Debug\OctoPaint.Core.Tests\OctoPaint.Core.Tests.exe
+$tests = @(
+  "OctoPaint.Core.Tests", "OctoPaint.Application.Tests", "OctoPaint.Core.Domain.Tests",
+  "OctoPaint.Tools.Tests", "OctoPaint.Application.Layer.Tests", "OctoPaint.Application.Composite.Tests",
+  "OctoPaint.Application.EditorState.Tests", "OctoPaint.Application.Paint.Tests", "OctoPaint.Application.Selection.Tests"
+)
+foreach ($test in $tests) {
+  & ".\out\bin\x64\Debug\$test\$test.exe"
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 ```
 
 ## リリースパッケージ
@@ -70,10 +78,12 @@ Visual Studio 2022で`OctoPaint.sln`を開いて`x64`プラットフォームを
 build-release.bat
 ```
 
-スクリプトは依存関係を復元し、自己完結型のRelease x64アプリをビルド・テストして、次のファイルを生成します。
+スクリプトは依存関係を復元し、自己完結型のRelease x64アプリと9個のヘッドレステストをビルドし、それらのテストを実行してから次のファイルを生成します。
 
 - `out\release\OctoPaint-<version>-win-x64.zip`
 - `out\release\OctoPaint-<version>-win-x64.msi`
+
+現時点では成果物の存在のみを確認します。パッケージ済みアプリの起動、ZIP内容の検査・再展開、MSIのインストール・アップグレード・修復・アンインストールは検証しません。
 
 ## プロジェクトの状態
 

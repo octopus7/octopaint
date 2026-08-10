@@ -38,7 +38,7 @@ OctoPaint.Core (플랫폼 독립 문서 도메인)
 - `src/OctoPaint.Core`: 플랫폼 독립 문서 모델
 - `src/OctoPaint.Application`: UI 중립 명령과 불변 스냅샷
 - `src/OctoPaint.WinUI`: 교체 가능한 WinUI 3 어댑터와 `OctoPaint` 실행 파일
-- `tests/OctoPaint.Core.Tests`: 애플리케이션과 코어의 헤드리스 검증
+- `tests`: Core, Application, 도메인, 도구, 레이어, 합성, 편집기 상태, 페인팅, 선택을 검증하는 9개 헤드리스 테스트 실행 파일
 - `docs`: 아키텍처, 제품, 편집기, 파일 형식 설계 문서
 
 ## 설계 문서
@@ -56,10 +56,18 @@ Visual Studio 2022에서 `OctoPaint.sln`을 열고 `x64` 플랫폼을 선택하�
 & "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" .\OctoPaint.sln /restore /m /p:Configuration=Debug /p:Platform=x64
 ```
 
-헤드리스 검증은 다음과 같이 실행합니다.
+빌드 후 9개 헤드리스 검증 전체를 다음과 같이 실행합니다.
 
 ```powershell
-.\out\bin\x64\Debug\OctoPaint.Core.Tests\OctoPaint.Core.Tests.exe
+$tests = @(
+  "OctoPaint.Core.Tests", "OctoPaint.Application.Tests", "OctoPaint.Core.Domain.Tests",
+  "OctoPaint.Tools.Tests", "OctoPaint.Application.Layer.Tests", "OctoPaint.Application.Composite.Tests",
+  "OctoPaint.Application.EditorState.Tests", "OctoPaint.Application.Paint.Tests", "OctoPaint.Application.Selection.Tests"
+)
+foreach ($test in $tests) {
+  & ".\out\bin\x64\Debug\$test\$test.exe"
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 ```
 
 ## 릴리스 패키지
@@ -70,10 +78,12 @@ Visual Studio 2022에서 `OctoPaint.sln`을 열고 `x64` 플랫폼을 선택하�
 build-release.bat
 ```
 
-스크립트는 의존성을 복원하고 자체 포함 Release x64 앱을 빌드·테스트한 다음 아래 파일을 생성합니다.
+스크립트는 의존성을 복원하고 자체 포함 Release x64 앱과 9개 헤드리스 테스트를 빌드한 뒤 해당 테스트를 실행하고 아래 파일을 생성합니다.
 
 - `out\release\OctoPaint-<version>-win-x64.zip`
 - `out\release\OctoPaint-<version>-win-x64.msi`
+
+현재는 산출물 존재 여부만 확인합니다. 패키징된 앱 실행, ZIP 내부 검사·재추출, MSI 설치·업그레이드·복구·제거는 검증하지 않습니다.
 
 ## 프로젝트 상태
 

@@ -38,7 +38,7 @@ OctoPaint.Core (platform-independent document domain)
 - `src/OctoPaint.Core`: platform-independent document model
 - `src/OctoPaint.Application`: UI-neutral commands and immutable snapshots
 - `src/OctoPaint.WinUI`: replaceable WinUI 3 adapter and `OctoPaint` executable
-- `tests/OctoPaint.Core.Tests`: headless application and core verification
+- `tests`: nine headless Core, Application, domain, tools, layer, compositor, editor-state, paint, and selection test executables
 - `docs`: architecture, product, editor, and file-format design documents
 
 ## Design documents
@@ -56,10 +56,18 @@ Open `OctoPaint.sln` in Visual Studio 2022 and select the `x64` platform, or run
 & "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" .\OctoPaint.sln /restore /m /p:Configuration=Debug /p:Platform=x64
 ```
 
-Run the headless checks with:
+Run all nine headless checks after building with:
 
 ```powershell
-.\out\bin\x64\Debug\OctoPaint.Core.Tests\OctoPaint.Core.Tests.exe
+$tests = @(
+  "OctoPaint.Core.Tests", "OctoPaint.Application.Tests", "OctoPaint.Core.Domain.Tests",
+  "OctoPaint.Tools.Tests", "OctoPaint.Application.Layer.Tests", "OctoPaint.Application.Composite.Tests",
+  "OctoPaint.Application.EditorState.Tests", "OctoPaint.Application.Paint.Tests", "OctoPaint.Application.Selection.Tests"
+)
+foreach ($test in $tests) {
+  & ".\out\bin\x64\Debug\$test\$test.exe"
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 ```
 
 ## Release packages
@@ -70,10 +78,12 @@ Install [WiX Toolset 5 or newer](https://docs.firegiant.com/wix/using-wix/), upd
 build-release.bat
 ```
 
-The script restores dependencies, builds and tests a self-contained Release x64 app, then creates:
+The script restores dependencies, builds the self-contained Release x64 app and all nine headless tests, runs those tests, then creates:
 
 - `out\release\OctoPaint-<version>-win-x64.zip`
 - `out\release\OctoPaint-<version>-win-x64.msi`
+
+It currently verifies artifact existence only; it does not launch the packaged app, inspect or re-extract the ZIP, or install, upgrade, repair, or uninstall the MSI.
 
 ## Project status
 

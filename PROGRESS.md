@@ -154,6 +154,8 @@
 - 기준 커밋: `878d098` (`feat: composite layers and wire layer controls`)
 - 실제 소스, 공개 API, WinUI 이벤트 연결, 렌더 경로, 9개 테스트 실행 파일, 릴리스 배치 및 기존 요구사항을 대조했다.
 - frontend-neutral Core/Application 소스와 9개 headless test main을 WSL의 `g++ 15.2.0 -std=c++23`으로 빌드해 모두 통과했다.
+- 같은 9개 실행 파일은 ASan+UBSan과 leak detection에서도 모두 통과했다. 다만 `-Wall -Wextra -Wpedantic -Werror` 빌드는 `Workspace.cpp`와 일부 테스트의 `-Wmissing-field-initializers`에서 실패해 warning-clean gate는 아직 통과하지 못했다.
+- 프로젝트·WiX·manifest·XAML XML 파일 16개는 구조 파싱을 통과했지만 이는 XAML/WiX 컴파일이나 Windows 실행 검증을 대신하지 않는다.
 - 이번 감사 환경에는 Visual Studio, Windows App SDK, WinUI 3 런타임이 없으므로 정식 MSVC 솔루션 빌드·GUI 실행·MSI 설치는 다시 수행하지 않았다. 2026-08-09 Windows Debug/Release 빌드, 9개 headless 테스트 및 실행 시작 검증은 `REQUESTS.md`의 기존 기록을 근거로만 구분해 유지한다.
 
 ### 현재 실제로 연결된 세로 슬라이스
@@ -169,7 +171,8 @@
 1. **P0 — 저장과 데이터 유실 방지**
    - `Workspace`에는 새 문서와 `MarkSaved`만 있고 파일 경로, serializer, open/save/save-as port가 없다.
    - File 메뉴의 Open, Save, Save As에는 handler가 없고 dirty 탭도 확인 없이 `CloseDocument`를 호출한다.
-   - `Workspace::ExecuteCommand`는 명령으로 문서를 먼저 변경한 뒤 redo 제거와 history `push_back`을 수행한다. Paint와 Selection 경로와 달리 사전 `reserve`나 일반 rollback 경계가 없어 history 할당 실패 시 변경만 남고 revision/Undo 기록이 누락될 수 있다.
+   - `Workspace::ExecuteCommand`는 명령으로 문서를 먼저 변경한 뒤 redo 제거와 history `push_back`을 수행한다. Paint와 Selection 경로와 달리 사전 `reserve`나 일반 rollback 경계가 없어 history 할당 실패 시 변경만 남고 revision/Undo 기록이 누락될 수 있다. `LayerTree::Move`도 source를 먼저 제거한 뒤 할당 가능한 destination insert를 수행해 실패 시 subtree를 잃을 수 있다.
+   - `MarkSaved(DocumentId)`는 실제로 기록된 불변 revision의 영수증 없이 호출 시점의 current revision을 clean으로 표시한다. 저장 중 추가 편집이 생기면 아직 기록되지 않은 revision까지 clean으로 잘못 표시할 수 있으므로 persistence 도입 전에 `SaveReceipt` 기반 계약이 필요하다.
    - `docs/FILE_FORMATS.md`는 안정 UUID, 문서 그래프, 원자 저장과 복구를 상세히 정의하지만 현재 `DocumentId`·`LayerId`는 process-unique `uint64_t`이고 Core `Document`는 title과 canvas size만 보관하므로 구현 모델과 영구 형식 사이의 매핑 계약부터 확정해야 한다.
    - `.ocp`, PNG, JPEG, PSD 구현과 자동 저장·복구 저널도 아직 없다.
 2. **P1 — 화면에 보이지만 실행되지 않는 명령과 도구**
@@ -189,25 +192,30 @@
    - 레이어 mask·clipping·channel 및 edit-target 모델이 없어 요구사항의 전체 페인팅 제약을 아직 만족하지 못한다.
 5. **P1 — 성능 및 품질 게이트**
    - `RefreshView`마다 전체 캔버스 크기의 CPU 합성 스냅샷과 Group 중간 버퍼를 다시 만들며 dirty-tile cache나 GPU 결과 일치 검증이 없다.
+   - history는 byte budget·checkpoint·eviction 없는 무제한 vector이고 paint 명령은 tile payload를 공유하더라도 전체 sparse-store metadata를 before/candidate/after로 복제한다. opacity 연속 변경도 preview 한 건이 아니라 값 변경마다 history를 추가한다.
+   - blend mode enum은 mutation 경계에서 범위를 검증하지 않아 잘못된 값이 문서에 들어간 뒤 합성 시점에 실패할 수 있다. Paint 결과는 무시되고 selection 예외는 조용히 삼켜져 사용자에게 원인과 복구 방법이 보이지 않는다.
    - 릴리스 배치는 9개 headless 테스트와 산출물 존재 여부를 확인하지만 ZIP 내부 내용, 저장·파일 손상·dirty-close·실제 WinUI 상호작용 테스트와 지속적 통합 워크플로는 없다.
    - 패키지는 signing, checksum, MSI 설치·실행·제거 smoke gate가 없고 `VERSION`을 실행 파일 version resource와 동기화하는 경로도 없다.
 6. **P2 — 확정 범위의 미착수 기능군**
    - Paint Brush, Eraser, Eyedropper, Bucket, Gradient, preset, symmetry, Clone/Healing.
    - clipboard, 문서·레이어 복제, command registry·palette, 단축키, 환경설정, Drag & Drop, Undo History 패널.
    - 조정, Gaussian Blur, Crop, Canvas Resize, Image Resampling, mask·channel, Merge 계열, 고급 레이어와 PSD 호환성 보고.
+   - canvas keyboard interaction, live accessibility status, marching ants의 reduce-motion 적용, UI 문자열 resource화와 실제 UI localization.
 
 ### 권장 구현 순서와 완료 기준
 
-1. **P0-1 명령·history 원자성**: 일반 `ExecuteCommand`, Undo, Redo가 실패해도 문서, history position, revision과 redo branch가 함께 원상태를 유지하도록 reserve/transaction/rollback 계약을 통일한다. fault-injection으로 할당·명령 실패 후 상태 동일성을 검증한다.
-2. **P0-2 `.ocp` 영속성 기반**: 새 형식을 다시 설계하지 말고 `docs/FILE_FORMATS.md`를 권위 문서로 사용한다. 먼저 process ID와 영구 UUID 매핑, 현재 구현된 최소 문서 그래프, 미지원 required/optional feature 처리와 history 저장 여부를 확정한 뒤 serializer를 구현한다. save-load-save와 손상·중단 시 마지막 정상 파일 보존 테스트를 완료 기준으로 한다.
+1. **P0-1 명령·history 원자성**: 일반 `ExecuteCommand`, Undo, Redo와 cross-parent `LayerTree::Move`가 실패해도 문서·layer tree, history position, revision과 redo branch가 함께 원상태를 유지하도록 reserve/transaction/rollback 계약을 통일한다. fault-injection으로 모든 할당·명령 실패 지점에서 상태 동일성과 subtree 보존을 검증한다.
+2. **P0-2 `.ocp` 영속성 기반**: 새 형식을 다시 설계하지 말고 `docs/FILE_FORMATS.md`를 권위 문서로 사용한다. 먼저 process ID와 영구 UUID 매핑, 현재 구현된 최소 문서 그래프, 미지원 required/optional feature 처리와 history 저장 여부를 확정한 뒤 serializer를 구현한다. 실제로 기록한 불변 revision을 담는 `SaveReceipt`만 clean 처리할 수 있어야 하며, save-load-save와 손상·중단 시 마지막 정상 파일 보존 테스트를 완료 기준으로 한다.
 3. **P0-3 Open/Save/Save As 및 dirty-close**: frontend-neutral 파일·interaction port와 WinUI picker를 연결하고 탭 닫기·창 종료에서 Save/Discard/Cancel을 강제한다. 취소·실패가 문서나 마지막 정상 파일을 바꾸지 않아야 한다.
 4. **P1-1 viewport와 실제 Move Layer**: 문서별 zoom/pan/reset 상태, 좌표 역변환, 픽셀 layer translation과 preview/commit을 구현한다. 선택 경계와 포인터 좌표가 모든 배율에서 일치하고 한 제스처가 한 Undo가 되어야 한다.
 5. **P1-2 페인팅 입력 완결**: release 전 preview, 정지 상태 Airbrush timer 누적, Smoothing 전달과 실패 진단을 연결한다. preview와 commit 결과가 같고 취소 시 history·픽셀이 변하지 않아야 한다.
 6. **P1-3 선택·기본 편집 명령 완결**: 새 문서 크기·배경 선택, 선택 결합·반전·해제, Cut/Copy/Paste, 레이어 복제와 명령 상태를 공통 registry로 연결한다. 메뉴에 보이는 항목은 실행되거나 명시적으로 disabled 상태여야 한다.
-7. **P1-4 Windows CI와 회귀 검증**: Debug/Release x64 빌드, 9개 headless 테스트, ZIP 내용 검증을 Windows runner에서 자동화하고 별도 WinUI smoke 시나리오를 둔다. WiX gate에서는 MSI 생성·설치·실행·제거를 검증하며, 릴리스 단계에서 `VERSION` 동기화, checksum과 코드 서명을 확인한다.
-8. **P1-5 합성 성능과 GPU 일치**: dirty tile/revision 기반 cache를 도입한 뒤 CPU 기준 결과와 GPU 결과 허용 오차, 대형 문서 메모리·응답성 예산을 자동 검증한다.
-9. **P2 기능 확장**: 일반 Brush·Eraser·Eyedropper부터 시작해 Bucket·Gradient, mask·channel, 조정·필터·기하 순으로 세로 슬라이스를 완성한다.
-10. **P2 상호운용성**: `.ocp` 안정화 후 PNG/JPEG를 연결하고 마지막에 PSD 구조 보존과 손실 변환 보고를 구현한다.
+7. **P1-4 입력 검증과 진단**: blend mode 등 enum을 mutation 전에 검증하고 generic command·paint·selection·render 실패를 안정적인 diagnostic code와 복구 메시지로 반환한다. 거부된 요청은 상태와 revision을 바꾸지 않으며 catch-all이 성공처럼 보이는 no-op을 만들지 않아야 한다.
+8. **P1-5 Windows CI와 회귀 검증**: Debug/Release x64 빌드, 9개 headless 테스트, ZIP 내용 검증을 Windows runner에서 자동화하고 별도 WinUI smoke 시나리오를 둔다. WiX gate에서는 MSI 생성·설치·실행·upgrade·repair·제거를 검증하며, 릴리스 단계에서 `VERSION` 동기화, checksum과 코드 서명을 확인한다. portable compiler의 missing-field initializer 경고를 정리한 뒤 warnings-as-errors와 case별 machine-readable 결과도 gate로 둔다.
+9. **P1-6 합성·history 자원 예산과 GPU 일치**: dirty tile/revision 기반 cache, changed-bounds 소비, history byte budget·checkpoint를 도입한 뒤 CPU 기준 결과와 GPU 결과 허용 오차, 16K·deep-group 문서의 peak memory·latency·업로드 타일 수를 자동 검증한다.
+10. **P2-1 접근성·현지화 완결**: canvas keyboard editing, focus·automation summary, live status와 reduce-motion을 연결하고 user-facing 문자열을 resource로 이동한다. 영어·한국어·일본어 fallback과 primary workflow를 자동 검증한다.
+11. **P2-2 기능 확장**: 일반 Brush·Eraser·Eyedropper부터 시작해 Bucket·Gradient, mask·channel, 조정·필터·기하 순으로 세로 슬라이스를 완성한다.
+12. **P2-3 상호운용성**: `.ocp` 안정화 후 PNG/JPEG를 연결하고 마지막에 PSD 구조 보존과 손실 변환 보고를 구현한다.
 
 ### 병렬 구현 시 소유권 제안
 
