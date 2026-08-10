@@ -909,3 +909,22 @@
 - Noise는 mutable PRNG stream이 아니라 seed·전역 좌표·channel domain hash를 사용한다.
 - edge/Emboss는 foundation neighborhood seam을 소비하고 output alpha는 같은 full-image coordinate의 source alpha다.
 - CPU reference Group 1~5 이후 새 대화에는 I1 Application adapter·registry, I2 UI/preview, I3 GPU parity·`LinearSrgbV2`만 남긴다.
+
+---
+
+# 요청 시작: 2026-08-10 20:57:09 KST | 작업 완료: 2026-08-10 21:10:09 KST (소요 시간: 0시간 13분 0초)
+
+## 구현 내역
+
+- 사용자 제공 주간 사용량 스크린샷의 7개 관측값 `19:10 45%`, `19:30 46%`, `19:40 47%`, `20:00 48%`, `20:20 49%`, `20:40 50%`, `20:50 51%`를 전사했다.
+- `docs/assets/work-usage-line.svg`에 1800×420 선그래프를 생성하고 `docs/WORK_EXECUTION_TIMELINE.md`의 Mermaid Gantt 바로 아래에 연결했다.
+- Mermaid 11.16.1 렌더링의 `18:20` 및 `20:40` tick 좌표로 SVG 시간축을 보정해 같은 시각의 수직 grid가 일치하도록 했다.
+- 실제 10분·20분 관측 간격을 비례 좌표로 반영하고, 원본 수치를 Markdown 표로 함께 남겼다.
+- XML 파싱, 7개 point 좌표·수치, UTF-8 Markdown, code fence, 로컬 링크와 `git diff --check`를 검증했다.
+- 브라우저에서 Mermaid 24개 task와 SVG 7개 point의 결합 렌더링, 1800px 동일 폭, 시각 grid 정렬, label 비잘림 및 JavaScript 오류 0건을 확인했다.
+
+## 결정 내용
+
+- Mermaid XY chart의 categorical x축은 불규칙한 10분·20분 간격을 정확히 표현하기 어려우므로, GitHub Markdown에서 안정적으로 렌더링되는 data-driven SVG를 사용한다.
+- 공통 KST 표시 범위는 Gantt 시작 `18:16:03`부터 마지막 사용량 관측 `20:50:00`까지이며, 관측이 없는 `19:10` 이전 구간은 임의 보간하지 않는다.
+- 사용량 색상은 기존 주작업 파란색·보조작업 회색과 구분되는 초록색으로 고정한다.
