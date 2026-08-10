@@ -837,3 +837,26 @@
 
 - Vibrance, Temperature/Tint, Color Balance, Channel Mixer는 Group 3 기본 완료 범위가 아니라 후속 확장으로 유지한다.
 - Group 4는 `GROUP123_INTEGRATION_SHA`, Group 5는 `G4_INTEGRATION_SHA`에서 시작하며 최종 integration은 half-open commit range로 중복 landing을 방지한다.
+
+---
+
+# 요청 시작: 2026-08-10 20:08:26 KST | 작업 완료: 2026-08-10 20:24:55 KST (소요 시간: 0시간 16분 29초)
+
+## 구현 내역
+
+- `docs/WORK_EXECUTION_TIMELINE.md`에 주작업과 각 작업의 하위 에이전트 실행을 실제 시작·종료 시각 기준 Mermaid Gantt로 작성했다.
+- 작업별 `section` 안에서 주작업은 채도 높은 파란색, 보조작업은 낮은 불투명도의 무채색으로 구분했다.
+- `REQUESTS.md`, Discord 원문 timestamp, Hermes delegation live transcript를 대조해 구현 감사부터 Group 5 전체 계획 freeze 감사까지 기록했다.
+- 아직 완료되지 않은 Group 4·5 주작업은 실제 종료 시각으로 오인되지 않도록 문서 스냅샷 시각까지 `active` 막대로 표시했다.
+
+## 정합성과 품질 검사
+
+- Mermaid 11.16.1을 로컬 HTTP 페이지에서 브라우저로 실제 렌더링해 Gantt SVG 생성, 가로 시간축, task label 및 색상 구분을 확인했다.
+- 브라우저 console JavaScript error 0건과 SVG 존재를 확인했고, 시각 검사에서 주작업 파란색·보조작업 흐릿한 회색 구분과 label 가독성을 확인했다.
+- UTF-8, Mermaid code fence, 표 열 수, 타임스탬프 순서 및 `git diff --check`를 검증한다.
+
+## 결정 내용
+
+- Mermaid Gantt의 계층형 task 제약 때문에 부모·자식 관계는 작업별 section과 `주작업`/`보조` 접두어로 표현한다.
+- 실제 시작하지 않은 foundation과 Wave 1~5는 시작·종료 시각을 추정하지 않고 차트에서 제외한다.
+- 진행 중 막대의 오른쪽 끝은 문서 스냅샷일 뿐 실제 완료 시각이 아니며, 후속 작업 종료 시 갱신할 수 있다.
