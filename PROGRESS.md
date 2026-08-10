@@ -13,6 +13,7 @@
 - [x] 영어, 한국어 및 일본어 README 문서
 - [x] 생성된 네이티브 빌드 및 Windows 패키징 출력물에 대한 저장소 제외 규칙
 - [x] 후보 기능 검토 문서 `CANDIDATE_FEATURES.md`
+- [x] 이미지 프로세싱 5그룹 병렬 구현 계획 `docs/IMAGE_PROCESSING_IMPLEMENTATION_PLAN.md`
 
 ## 문서 및 작업 기록
 

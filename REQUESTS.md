@@ -787,3 +787,53 @@
 - portable 9개 테스트의 ASan+UBSan 통과, XML 16개 구조 파싱 통과와 함께 `-Werror` missing-field-initializer 실패를 성공 결과와 분리 기록했다.
 - 영어·한국어·일본어 README에 9개 테스트 전체 실행 방법과 릴리스 배치가 실제 앱·ZIP·MSI를 smoke 검증하지 않는 한계를 동기화했다.
 - `docs/ARCHITECTURE.md`와 `docs/EDITOR_ARCHITECTURE.md`에서 현재 WinUI 내부 renderer 배치와 향후 분리 renderer·codec 모듈 목표를 명확히 구분했다.
+
+---
+
+# 요청 시작: 2026-08-10 18:49:41 KST | 작업 완료: 2026-08-10 19:25:47 KST (소요 시간: 0시간 36분 6초)
+
+## 구현 내역
+
+- `docs/IMAGE_PROCESSING_IMPLEMENTATION_PLAN.md`를 만들고 이미지 프로세싱 5개 그룹의 우선순위, 공통 계약, 불변 SHA pipeline, file ownership, RED/GREEN·Werror·sanitizer gate를 문서화했다.
+- 현재 대화의 병렬 wave와 새 대화의 독립 workstream을 분리하고 raw leaf tip, leaf별 landing commit, shared integration 및 RESULT metadata 책임을 정의했다.
+- 두 차례 독립 plan audit에서 발견한 encoded/linear color profile 충돌, halo view, premultiplied validation, deterministic transfer, incomplete API, request-record 및 downstream integration 문제를 반영했다.
+- Exposure/Gamma fixed-point algorithm과 LUT checksum, point-operation validation precedence, Histogram·Levels·Curves 계약 및 Group 4·5 후속 integration range를 고정했다.
+- Markdown UTF-8, code fence, local link, required contract token, ownership consistency와 `git diff --check`를 통과했다.
+
+## 결정 내용
+
+- 첫 compatibility reference는 `Rgba8Premultiplied + EncodedSrgbV1`로 버전 지정하고 future linear-light renderer와 동일하다고 주장하지 않는다.
+- 제품 `ImageOperator` registry, Workspace/WinUI/D3D 연결과 BGRA/linear profile adapter는 독립 CPU library 이후로 미룬다.
+- contract 변경이 leaf dispatch 뒤 필요하면 모든 old-anchor leaf를 폐기하고 새 pushed contract SHA에서 전부 다시 시작한다.
+- WSL에서 MSVC/WinUI 증거를 만들지 않으며 실제 실행하지 않은 항목은 `NOT_RUN`으로 남긴다.
+
+---
+
+# 요청 시작: 2026-08-10 19:06:32 KST | 작업 완료: 2026-08-10 19:25:47 KST (소요 시간: 0시간 19분 15초)
+
+## 구현 내역
+
+- 현재 대화 실행 범위를 Group 1뿐 아니라 Group 2 Histogram·Levels·Curves까지 확장했다.
+- Group 2 public structs, transparent histogram policy, composite-before-channel Levels/Curves ordering, malformed input 및 failure atomicity를 frozen contract에 추가했다.
+- Histogram, Levels, Curves를 충돌 없는 세 leaf와 독립 test executable로 분리하고 Group 1 leaf와 함께 두 parallel wave에 배치했다.
+
+## 결정 내용
+
+- Group 2는 Group 1의 buffer, LUT, transfer compiler만 소비하고 Group 4·5 concrete source에 의존하지 않는다.
+- Group 2 leaf도 raw review input으로 제출하며 주 integration agent가 request record와 project registration을 포함한 별도 landing commit으로 push한다.
+
+---
+
+# 요청 시작: 2026-08-10 19:15:02 KST | 작업 완료: 2026-08-10 19:25:47 KST (소요 시간: 0시간 10분 45초)
+
+## 구현 내역
+
+- 현재 대화 실행 범위를 Group 3 Hue Shift, Saturation, 결합 Hue/Saturation, RGB Channel Offset 및 Colorize까지 확장했다.
+- degree Q8.8 hue, Q8.8 saturation scale, integer HSL conversion, achromatic rule, wrap, Colorize lightness/strength와 deterministic grid checksum gate를 정의했다.
+- Group 3을 Hue/Saturation과 RGB Offset/Colorize의 두 비중첩 leaf/test executable로 분리해 Wave 2와 Wave 3에 배치했다.
+- 현재 대화 통합 anchor를 `GROUP123_INTEGRATION_SHA`로 변경하고 새 대화에는 Group 4·5만 남겼다.
+
+## 결정 내용
+
+- Vibrance, Temperature/Tint, Color Balance, Channel Mixer는 Group 3 기본 완료 범위가 아니라 후속 확장으로 유지한다.
+- Group 4는 `GROUP123_INTEGRATION_SHA`, Group 5는 `G4_INTEGRATION_SHA`에서 시작하며 최종 integration은 half-open commit range로 중복 landing을 방지한다.
