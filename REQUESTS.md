@@ -760,3 +760,23 @@
 - LayerTree의 앞쪽 sibling을 아래쪽, 뒤쪽 sibling을 위쪽으로 해석하고 Group은 자식을 먼저 격리 합성한 뒤 Group opacity와 blend mode를 부모에 한 번 적용한다.
 - 현재 선택 rasterizer의 0/1 coverage 계약에서는 0인 픽셀만 제외하며, feathered 8-bit coverage 도입 시 opacity 가중 계약을 별도로 확장한다.
 - 저장·dirty-close 보호, 레이어 마스크·클리핑, GPU 합성 일치 검증은 이번 합성/UI 기반 작업과 분리된 후속 구현으로 유지한다.
+
+---
+
+# 요청 시작: 2026-08-10 18:16:03 KST | 작업 완료: 2026-08-10 18:33:50 KST (소요 시간: 0시간 17분 47초)
+
+## 구현 내역
+
+- Core·Application 데이터 안전성, WinUI 기능 도달성, 테스트·릴리스·문서 정합성을 3개 읽기 전용 에이전트로 병렬 분석하고 주 에이전트가 소스와 기존 요구사항을 교차검증했다.
+- `PROGRESS.md`에 기준 커밋과 환경 한계, 실제 연결된 세로 슬라이스, P0/P1/P2 미완성 항목, 완료 기준이 있는 권장 구현 순서와 병렬 파일 소유권을 기록했다.
+- 실제 동작과 다른 Move Layer 완료 표기를 미완료로 수정하고, 릴리스 배치의 headless 테스트 수를 9개로 바로잡았으며 ZIP 내용 검증이 실제로는 존재 여부 확인에 그친다는 상태를 반영했다.
+- 영어·한국어·일본어 README의 오래된 초기 scaffold 상태 문구를 현재 인메모리 편집 범위와 주요 미완성 범위가 동일하게 드러나도록 동기화하고 `PROGRESS.md`로 연결했다.
+- frontend-neutral Core/Application 소스와 9개 headless 테스트를 WSL의 GCC 15.2/C++23으로 직접 빌드·실행해 모두 통과시켰다.
+- `git diff --check`, Markdown UTF-8 읽기, code fence 및 로컬 링크 검사를 통과시키고 오래된 상태 문구가 남지 않았음을 확인했다.
+
+## 결정 내용
+
+- 새 분석 문서를 중복 생성하지 않고 구현 현황과 다음 작업의 권위 문서인 `PROGRESS.md`를 확장했다. 후보 승인용 `CANDIDATE_FEATURES.md`는 현재 구현 추적 용도가 아니므로 변경하지 않았다.
+- 최우선 P0는 일반 명령·history의 실패 원자성, 기존 `docs/FILE_FORMATS.md`를 따르는 `.ocp` 영속성, Open/Save/Save As와 dirty-close 보호 순으로 정했다.
+- 후속 P1은 viewport와 실제 Move Layer 픽셀 이동, 페인팅 preview·Airbrush timer·Smoothing 연결, 기본 편집 명령, Windows CI·패키지 검증, 합성 성능·GPU 일치 검증 순으로 정했다.
+- 이번 환경에서는 정식 MSVC 솔루션 빌드, WinUI GUI 실행, MSI 설치를 검증하지 않았으며 기존 Windows 검증 기록과 이번 WSL headless 결과를 문서에서 명확히 구분했다.

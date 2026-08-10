@@ -77,4 +77,4 @@ The script restores dependencies, builds and tests a self-contained Release x64 
 
 ## Project status
 
-The repository currently contains the initial C++23 solution scaffold and the first frontend-independent workspace flow. The broader editing and interoperability capabilities above are design targets and will be implemented incrementally.
+The repository now has a working in-memory editing slice: multi-document state with per-document undo/redo, sparse tiled Raster/Group layers, CPU compositing with 16 blend modes, Pencil/Airbrush, four replace-mode selection tools, and WinUI/D3D canvas and layer controls. Durable Open/Save and file formats, dirty-close protection, viewport navigation, true Move Layer pixel translation, and most planned editing features remain incomplete. See [PROGRESS.md](PROGRESS.md) for the source-audited status and prioritized next work.

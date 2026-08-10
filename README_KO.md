@@ -77,4 +77,4 @@ build-release.bat
 
 ## 프로젝트 상태
 
-현재 저장소에는 초기 C++23 솔루션 스캐폴드와 첫 프런트엔드 독립 작업 공간 흐름이 구현되어 있습니다. 위의 광범위한 편집 및 상호 운용 기능은 설계 목표이며 단계적으로 구현할 예정입니다.
+현재 저장소에는 동작하는 인메모리 편집 세로 슬라이스가 있습니다. 문서별 Undo/Redo가 있는 다중 문서 상태, 희소 타일 Raster/Group 레이어, 16개 블렌딩 모드 CPU 합성, Pencil/Airbrush, replace 방식 선택 도구 4종, WinUI/D3D 캔버스와 레이어 컨트롤이 구현되어 있습니다. 영구 Open/Save와 파일 형식, dirty-close 보호, viewport 탐색, 실제 Move Layer 픽셀 이동 및 계획된 편집 기능 대부분은 아직 미완성입니다. 소스 감사 기준의 현황과 우선순위는 [PROGRESS.md](PROGRESS.md)를 참고하세요.
