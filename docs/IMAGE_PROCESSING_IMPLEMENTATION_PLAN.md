@@ -1,13 +1,14 @@
 # OctoPaint 이미지 프로세싱 구현 계획
 
-상태: `VALIDATED_COMPLETE`  
-실행 범위: 현재 대화에서 Group 1·2·3 구현·통합  
-후속 범위: Group 4·5는 지정된 새 대화 및 integration stage에서 진행  
+상태: `VALIDATED_COMPLETE`
+최종 계약 감사: `PASS` — content SHA-256 `dd576c38856996391e26eaa78e2db03d649704783e6d39bba5dfbef3bc26cc17` (상태 metadata 적용 전)
+실행 범위: 현재 대화에서 Group 1·2·3·4·5 구현·통합
+후속 새 대화 범위: Application/renderer adapter, UI, GPU parity, LinearSrgbV2
 비범위: `Workspace`, WinUI, D3D/HLSL, Undo/Redo, 파일 형식, 실제 제품 명령 및 UI 연결
 
 ## 1. 목표와 완료 의미
 
-플랫폼 API에 의존하지 않는 C++23 CPU 이미지 프로세싱 라이브러리를 만들고 작은 고정 버퍼로 검증한다. Group 1은 기본 명도·톤, Group 2는 Histogram·Levels·Curves, Group 3은 Hue·Saturation·RGB Offset·Colorize를 구현한다.
+플랫폼 API에 의존하지 않는 C++23 CPU 이미지 프로세싱 라이브러리를 만들고 작은 고정 버퍼로 검증한다. Group 1은 기본 명도·톤, Group 2는 Histogram·Levels·Curves, Group 3은 Hue·Saturation·RGB Offset·Colorize, Group 4는 Convolution·Box/Gaussian Blur·Sharpen·Unsharp Mask, Group 5는 effect·edge·deterministic noise/dither를 구현한다.
 
 이번 단계에서 “구현 완료”는 다음만 뜻한다.
 
@@ -79,7 +80,7 @@ struct MutableImageView final {
 };
 ```
 
-Group 1·2·3는 source와 destination의 geometry가 같은 **point operation**만 사용한다. tile halo와 destination ROI는 이 타입에 억지로 넣지 않는다. Group 4는 구현 전에 별도 `NeighborhoodImageView` 계약을 publish한다.
+Group 1·2·3와 G5-A/B는 source와 destination geometry가 같은 **point operation**만 사용한다. tile halo와 destination ROI는 이 타입에 억지로 넣지 않는다. Group 4와 G5-C는 별도 `NeighborhoodImageView` 계약을 사용한다.
 
 ### 3.3 stable result contract
 
@@ -98,6 +99,10 @@ enum class ProcessResult : std::uint8_t {
     OverlappingBuffers,
     SourceNotPremultiplied,
     InvalidControlPoints,
+    InvalidKernel,
+    InvalidRegion,
+    InsufficientHalo,
+    ResourceLimitExceeded,
 };
 
 std::string_view ProcessResultMessage(ProcessResult result) noexcept;
@@ -146,7 +151,7 @@ format cast 오류는 `UnsupportedPixelFormat`, encoding cast 오류는 `Unsuppo
 
 ### 3.5 integer pixel math
 
-Group 1·2·3의 byte path는 다음 정수식을 사용한다.
+Group 1·2·3와 Group 5의 straight-RGB byte path는 다음 정수식을 사용한다.
 
 ```text
 unpremultiply(c, a) = a == 0 ? 0 : floor((c * 255 + floor(a / 2)) / a)
@@ -155,11 +160,11 @@ clamp_byte(x)       = min(255, max(0, x))
 ```
 
 - 모두 넉넉한 unsigned/signed intermediate에서 계산한다.
-- alpha는 Group 1·2·3에서 보존한다.
+- alpha는 Group 1·2·3·5에서 보존한다. Group 4는 §4.5의 four-channel convolution 및 final invariant 규칙을 따른다.
 - neutral spec은 active row copy fast path를 사용해 모든 valid premultiplied byte를 byte-exact 보존한다.
 - compile option에서 fast-math를 사용하지 않는다.
 
-## 4. Group 1·2·3 public API freeze
+## 4. Group 1·2·3·4·5 public API freeze
 
 모든 header와 parameter 의미는 leaf fan-out 전에 contract owner가 test와 함께 publish한다. leaf는 public header를 수정하지 않는다.
 
@@ -436,6 +441,160 @@ ProcessResult ProcessColorize(ImageView, MutableImageView, ColorizeSpec) noexcep
 - contract commit은 primary/secondary/gray vectors, `±120°`, `±360°`, saturation 0/1x/2x, alpha fixtures와 deterministic RGB grid checksum을 publish한다.
 - Vibrance, Temperature/Tint, Color Balance, Channel Mixer는 Group 3 후속 확장이며 이번 완료 범위가 아니다.
 
+### 4.5 Group 4 neighborhood·convolution 계약
+
+Group 4는 point view와 분리된 다음 contract를 foundation commit에서 publish한다.
+
+```cpp
+struct NeighborhoodSourceView final {
+    ImageView image;
+    std::uint32_t origin_x;
+    std::uint32_t origin_y;
+    std::uint32_t full_width;
+    std::uint32_t full_height;
+};
+
+struct NeighborhoodDestinationView final {
+    MutableImageView image;
+    std::uint32_t origin_x;
+    std::uint32_t origin_y;
+};
+
+struct SampledRgba8 final {
+    std::uint8_t red;
+    std::uint8_t green;
+    std::uint8_t blue;
+    std::uint8_t alpha;
+};
+
+inline constexpr std::uint64_t MaxNeighborhoodScratchBytes =
+    512ULL * 1024ULL * 1024ULL;
+struct ScratchBudget final {
+    std::uint64_t max_bytes{ MaxNeighborhoodScratchBytes };
+};
+
+ProcessResult ValidateNeighborhoodOperation(NeighborhoodSourceView,
+    NeighborhoodDestinationView, std::uint16_t radius,
+    BorderMode) noexcept;
+ProcessResult SampleNeighborhoodRgba8(NeighborhoodSourceView,
+    std::int64_t full_x, std::int64_t full_y, BorderMode,
+    SampledRgba8& output) noexcept;
+
+using KernelCoefficientQ16 = std::int32_t;
+struct Kernel1DView final {
+    std::span<KernelCoefficientQ16 const> coefficients;
+    std::uint16_t radius;
+};
+struct Kernel3x3Q16 final {
+    std::array<KernelCoefficientQ16, 9> coefficients;
+};
+
+ProcessResult ProcessSeparableConvolution(NeighborhoodSourceView,
+    NeighborhoodDestinationView, Kernel1DView horizontal,
+    Kernel1DView vertical, BorderMode,
+    ScratchBudget budget = {}) noexcept;
+ProcessResult ProcessConvolution3x3(NeighborhoodSourceView,
+    NeighborhoodDestinationView, Kernel3x3Q16 const&, BorderMode) noexcept;
+
+struct BoxBlurSpec final { std::uint16_t radius; };       // [0,32]
+struct GaussianBlurSpec final { std::uint8_t radius; };   // [0,8]
+struct UnsharpMaskSpec final {
+    std::uint8_t radius;                                  // [0,8]
+    std::uint16_t amount_q8_8;                            // [0,1024]
+};
+
+ProcessResult ProcessBoxBlur(NeighborhoodSourceView,
+    NeighborhoodDestinationView, BoxBlurSpec, BorderMode,
+    ScratchBudget budget = {}) noexcept;
+ProcessResult ProcessGaussianBlur(NeighborhoodSourceView,
+    NeighborhoodDestinationView, GaussianBlurSpec, BorderMode,
+    ScratchBudget budget = {}) noexcept;
+ProcessResult ProcessSharpen3x3(NeighborhoodSourceView,
+    NeighborhoodDestinationView, BorderMode) noexcept;
+ProcessResult ProcessUnsharpMask(NeighborhoodSourceView,
+    NeighborhoodDestinationView, UnsharpMaskSpec, BorderMode,
+    ScratchBudget budget = {}) noexcept;
+```
+
+좌표·halo 규칙:
+
+- source `image` rectangle은 full-image 좌표 `(origin_x,origin_y)`에서 시작하고 full bounds 안에 있어야 한다.
+- destination rectangle도 full bounds 안에 있어야 한다.
+- source와 destination은 모두 `Rgba8Premultiplied + EncodedSrgbV1`이어야 하며 각자의 stride/buffer를 독립 검증한다. source active pixel만 premultiplied invariant를 검증하고 overwrite destination 기존 pixel은 검증하지 않는다.
+- `full_width==0 || full_height==0`이면 둘 다 0이어야 하고 source/destination image도 empty, 모든 origin도 0이어야 한다. 이 valid empty operation은 `ValidateNeighborhoodOperation`에서 overlap·halo 없이 `ProcessResult::Succeeded` no-op다. nonzero full bounds의 zero-area destination도 origin/bounds까지 검증한 뒤 overlap·halo 없이 `ProcessResult::Succeeded` no-op다.
+- radius `r` 연산은 destination rectangle을 각 방향으로 `r` 확장하고 full bounds로 clip한 모든 pixel이 source rectangle 안에 있어야 한다. 아니면 `InsufficientHalo`다.
+- full bounds 밖 sample만 BorderMode로 생성한다. tile/source rectangle의 경계에 BorderMode를 적용하지 않는다.
+- Mirror는 마지막 pixel을 중복하지 않는 reflect-101이며 size 1 축은 항상 index 0이다.
+- neighborhood source와 destination supplied spans의 overlap은 모두 거부한다. radius 0 identity도 detached output을 사용한다.
+- Group 4 public operation은 scratch budget/radius/kernel option을 먼저 검증한 뒤 `ValidateNeighborhoodOperation`을 호출한다. helper는 border enum → source view → destination view → origin/full-bound overflow → destination bounds → overlap → required halo 순서로 검증한다. `SampleNeighborhoodRgba8`은 valid border와 source를 먼저 검증하고, `full_width==full_height==0`이면 모든 border mode/coordinate에서 `InvalidRegion`을 반환하며 `output`을 보존한다. nonempty full bounds 내부 sample이 supplied source rectangle에 없으면 `InsufficientHalo`를 반환하며 실패 시 `output`을 보존한다. foundation이 두 helper를 구현·검증하고 G4-A/B/C와 G5-C는 pushed contract의 frozen seam을 소비한다.
+
+수치·alpha 규칙:
+
+- generic kernel coefficient는 signed Q16이고 각 1D/3×3 kernel의 algebraic sum은 정확히 65536이어야 한다. coefficient count는 `2*radius+1`, radius는 `[0,32]`, `sum(abs(coefficient)) <= 2^26`이어야 한다. radius 범위 위반은 `InvalidParameter`, coefficient count/algebraic sum/absolute-sum 위반은 `InvalidKernel`이며 scratch cap만 `ResourceLimitExceeded`다. `INT32_MIN`의 absolute value도 signed 64-bit로 계산한다.
+- separable horizontal은 byte sample×Q16을 signed 64-bit Q16 scratch에 누적하고 **reduction/clamp 없이** 저장한다. vertical은 Q16×Q16 scratch를 signed 64-bit Q32에 누적한 뒤 한 번만 `v>=0 ? (v+2^31)>>32 : -(((-v)+2^31)>>32)`로 half-away-from-zero reduce하고 final clamp 전 signed result로 유지한다. `abs_sum <= 2^26`이면 horizontal magnitude는 `255*2^26 < 2^35`, vertical magnitude는 `255*2^52 < 2^60`이라 signed 64-bit 안이다.
+- 3×3은 signed 64-bit Q16 accumulator를 `v>=0 ? (v+32768)>>16 : -(((-v)+32768)>>16)`로 한 번 reduce한다. convolution 중간에는 alpha/RGB invariant clamp를 하지 않는다. 최종 alpha를 `[0,255]`로 clamp한 뒤 최종 RGB를 각각 `[0,final_alpha]`로 clamp한다. separable path도 동일한 최종 clamp 순서를 사용한다.
+- Box Blur radius는 `[0,32]`이고 Q16 kernel을 사용하지 않는다. 각 pass에서 고정 divisor `n=2r+1`로 `floor((nonnegative_sum + floor(n/2))/n)` half-up reduce해 byte scratch/output을 만든다. Transparent border의 0 sample도 divisor에 포함하고 edge renormalization은 없다. radius 0은 detached byte-exact copy다.
+- Gaussian radius `r`는 `[0,8]`이며 order `2r` binomial row를 사용한다. coefficient는 `C(2r,i) * 2^(16-2r)`라 정확한 Q16 정수이고 합은 정확히 65536이므로 residual correction은 없다. separable Q32 규칙을 사용하며 radius 0은 identity다.
+- Gaussian kernel checksum은 radius별 coefficient를 왼쪽부터 signed 32-bit little-endian으로 serialize한 뒤 FNV-1a 64로 계산한다: `r0=4d22107f9dcb30cc`, `r1=a4ee37f98269a495`, `r2=2c9b26cf4fb17115`, `r3=613dc51b0fbcab85`, `r4=8d26018468815473`, `r5=65f0292fbe04ded0`, `r6=3740e30e4e98c3a2`, `r7=ab57a9f203cbcc36`, `r8=b5dc37c1758a80d1`.
+- Sharpen의 stored Q16 kernel은 `[0,-65536,0; -65536,327680,-65536; 0,-65536,0]`이고 3×3 signed reduction을 사용한다.
+- Unsharp는 Gaussian byte output과 원본 premultiplied byte의 `delta=source-blur`에 `adjustment = p>=0 ? (p+128)/256 : -(((-p)+128)/256)`, `p=delta*amount_q8_8`을 적용한다. alpha channel의 `source+adjustment`를 `[0,255]`로 clamp한 뒤 RGB channel 결과를 각각 `[0,final_alpha]`로 clamp한다. amount 0은 detached byte-exact identity다.
+- Blur/convolution/sharpen/unsharp는 alpha를 포함한 premultiplied RGBA 네 channel을 처리한다. Transparent border는 `(0,0,0,0)`이고 edge renormalization은 하지 않는다.
+- scratch budget은 `[0, MaxNeighborhoodScratchBytes]`이며 상한 초과는 image validation 전에 `InvalidParameter`다. scratch payload byte 수는 checked `uint64_t` 곱셈/덧셈으로 계산한다. overflow는 `SizeOverflow`, required bytes가 caller budget 또는 512 MiB 공통 상한을 넘으면 `ResourceLimitExceeded`다.
+- peak simultaneously-live scratch payload는 destination active pixel 수 `P=width*height`에 대해 separable/Gaussian `32*P` byte(Q16 `int64_t` RGBA), Box `4*P` byte, Unsharp amount>0 `36*P` byte(Q16 scratch+blurred RGBA staging), 3×3/Sharpen 및 separable·Box·Gaussian radius-0/Unsharp amount-0 identity `0` byte로 고정한다. Unsharp amount 0은 radius 값의 범위만 option 단계에서 검증하고 effective halo를 0으로 사용한다. container metadata/allocator overhead는 cap 계산에 포함하지 않는다.
+- 필요한 모든 scratch/staging allocation은 destination mutation 전에 끝낸다. `std::bad_alloc` 또는 `std::length_error`는 `noexcept` 경계를 넘기지 않고 `ResourceLimitExceeded`로 변환하며 destination 전체를 보존한다. scratch 계산·budget 검사는 allocation 전에 수행한다.
+- 모든 region, halo, kernel, radius, allocation 크기를 destination mutation 전에 검증한다. radius/resource limit 오류는 각각 `InvalidParameter`/`ResourceLimitExceeded`다.
+- whole image와 적절한 tile+halo 호출은 active destination byte가 정확히 같아야 한다.
+
+### 4.6 Group 5 effect·edge·noise/dither 계약
+
+```cpp
+struct ThresholdSpec final { std::uint8_t threshold; };
+struct PosterizeSpec final { std::uint16_t levels; }; // [2,256]
+struct SolarizeSpec final { std::uint8_t threshold; };
+struct ImageOrigin final { std::uint32_t x; std::uint32_t y; };
+struct NoiseSpec final { std::uint64_t seed; std::uint8_t amplitude; };
+
+ProcessResult ProcessThreshold(ImageView, MutableImageView, ThresholdSpec) noexcept;
+ProcessResult ProcessPosterize(ImageView, MutableImageView, PosterizeSpec) noexcept;
+ProcessResult ProcessSolarize(ImageView, MutableImageView, SolarizeSpec) noexcept;
+ProcessResult ProcessSepia(ImageView, MutableImageView) noexcept;
+ProcessResult ProcessDeterministicNoise(ImageView, MutableImageView,
+    ImageOrigin, NoiseSpec) noexcept;
+ProcessResult ProcessOrderedDither4x4(ImageView, MutableImageView,
+    ImageOrigin) noexcept;
+ProcessResult ProcessSobelEdge(NeighborhoodSourceView,
+    NeighborhoodDestinationView, BorderMode) noexcept;
+ProcessResult ProcessLaplacianEdge(NeighborhoodSourceView,
+    NeighborhoodDestinationView, BorderMode) noexcept;
+ProcessResult ProcessEmboss(NeighborhoodSourceView,
+    NeighborhoodDestinationView, BorderMode) noexcept;
+```
+
+point effect 규칙:
+
+- Threshold는 straight RGB의 `Luma709Q8`가 threshold 이상이면 255, 미만이면 0인 grayscale이다. equality는 white다.
+- Posterize는 각 straight channel에 `index=floor((x*(levels-1)+127)/255)`, `out=floor((index*255+floor((levels-1)/2))/(levels-1))`를 적용한다.
+- Solarize는 `x >= threshold`인 straight channel만 `255-x`로 바꾼다.
+- Sepia는 straight RGB에 Q14 matrix `[6439,12599,3097; 5718,11239,2753; 4456,8749,2146]`를 곱하고 각 row에 8192를 더해 `>>14`, byte clamp한다.
+- 위 효과는 alpha를 보존하고 결과 straight RGB를 한 번 premultiply한다.
+
+noise/dither 규칙:
+
+- Noise는 full-image coordinate `(origin.x+local_x, origin.y+local_y)`와 explicit seed만 사용한다. 두 coordinate addition은 `uint32_t` 범위에서 checked 연산하며 overflow면 destination mutation 전에 `SizeOverflow`를 반환한다.
+- 각 R/G/B channel key는 `seed ^ ((std::uint64_t{x} << 32) | std::uint64_t{y}) ^ channel_constant`다. SplitMix64는 모든 unsigned 연산을 modulo 2^64로 수행한다: `z=key+0x9e3779b97f4a7c15; z=(z^(z>>30))*0xbf58476d1ce4e5b9; z=(z^(z>>27))*0x94d049bb133111eb; hash=z^(z>>31)`.
+- `signed_noise = static_cast<std::int32_t>(hash % static_cast<std::uint64_t>(2 * amplitude + 1)) - static_cast<std::int32_t>(amplitude)`를 straight channel에 더해 clamp한다. modulo 결과를 signed 32-bit로 명시 변환한 뒤 subtraction하므로 C++ unsigned promotion이 없다. channel constants는 R=0, G=`0x243f6a8885a308d3`, B=`0x13198a2e03707344`다.
+- frozen hash/noise vectors `(seed,x,y,amplitude):(Rhash,Ghash,Bhash)->(Rnoise,Gnoise,Bnoise)`는 `(0,0,0,10):(e220a8397b1dcdaf,2cb0f69f4abea221,3bb548a553e612ba)->(6,-6,3)`, `(1,2,3,20):(a8391e4528c2a97f,d8df73b58dceeec6,d52cef87697459bd)->(11,9,-15)`, `(123456789abcdef0,1024,2048,255):(1e954a8841ac2400,5dc0e991bf38a98e,204e9b4925288631)->(83,-254,142)`다.
+- Ordered Dither는 straight RGB의 `Luma709Q8`와 Bayer 4×4 `[0,8,2,10; 12,4,14,6; 3,11,1,9; 15,7,13,5]`를 full-image origin으로 index한다. `luma*16 >= matrix*256+128`이면 straight white, 아니면 straight black이다. coordinate overflow는 Noise와 동일하게 `SizeOverflow`다.
+- noise와 dither는 기존 alpha를 보존하고 결과 straight RGB를 정확히 한 번 premultiply한다. alpha 0은 canonical `(0,0,0,0)`이며 tile/whole 결과가 byte-exact 같아야 한다.
+
+edge 규칙:
+
+- Sobel은 straight `Luma709Q8`에 Gx `[-1,0,1;-2,0,2;-1,0,1]`, Gy `[-1,-2,-1;0,0,0;1,2,1]`를 적용하고 `clamp_byte(floor((abs(gx)+abs(gy)+2)/4))` grayscale을 출력한다.
+- Laplacian은 `[0,1,0;1,-4,1;0,1,0]` 결과의 absolute value를 byte clamp한다.
+- Emboss는 zero-sum `[-2,-1,0;-1,0,1;0,1,2]` 결과에 128을 더해 clamp한다. complete sampled neighborhood가 constant인 interior pixel과 Clamp/Mirror constant field만 straight 128이다. Transparent exterior는 constancy를 깨며 constant-100 2×2 fixture의 row-major straight output을 `[255,128;128,0]`으로 고정한다.
+- edge/emboss는 Group 4 neighborhood·halo·border validator를 사용한다. output alpha는 source neighborhood의 같은 full-image coordinate alpha이며 grayscale/emboss straight RGB를 그 alpha로 premultiply한다.
+- 모든 operation은 option/region/source를 검증한 뒤에만 destination을 변경한다. invalid spec과 arithmetic/resource failure는 destination 전체를 보존한다.
+
 ## 5. 5개 기능 그룹
 
 1. **기본 명도·톤** — Brightness, Contrast, Exposure, Gamma, Invert, Desaturate, LUT/buffer contract
@@ -444,35 +603,37 @@ ProcessResult ProcessColorize(ImageView, MutableImageView, ColorizeSpec) noexcep
 4. **공간 필터** — Convolution, Box/Gaussian Blur, Sharpen, Unsharp Mask
 5. **효과·분석** — Threshold, Posterize, Solarize, Sepia, Sobel/Laplacian, Emboss, deterministic Noise/Dither
 
-Group 1·2·3의 위 명시된 기본 항목을 이번 대화에서 구현한다.
+Group 1·2·3·4·5의 위 명시된 기본 항목을 이번 대화에서 구현한다.
 
 ## 6. 불변 SHA 파이프라인
 
 ```text
 PLAN_ANCHOR_SHA
-  -> Group 1+2+3 common contract/foundation commit
-  -> GROUP123_CONTRACT_SHA
+  -> Group 1+2+3+4+5 common contract/foundation commit
+  -> GROUP12345_CONTRACT_SHA
       -> Wave 1: G1-A, G1-B, G2-A
       -> Wave 2: G2-B, G2-C, G3-A
-      -> Wave 3: G3-B
+      -> Wave 3: G3-B, G4-A, G5-A
+  -> G4-A convolution landing commit
+  -> G4_CONVOLUTION_SHA
+      -> Wave 4: G4-B, G5-B
+  -> G4-B Gaussian landing commit
+  -> G4_GAUSSIAN_SHA
+      -> Wave 5: G4-C (G4_GAUSSIAN_SHA), G5-C (G4_CONVOLUTION_SHA)
   -> leaf별 별도 landing commit 및 immediate push
   -> shared seam / project / combined-regression commit
-  -> GROUP123_INTEGRATION_SHA
+  -> GROUP12345_INTEGRATION_SHA
   -> descendant RESULT metadata commit
 
-GROUP123_INTEGRATION_SHA
-  -> 새 대화 G4 neighborhood contract -> G4 implementation
-G4_INTEGRATION_SHA
-  -> 새 대화 G5 contract -> G5 implementation
-  -> IP-I Group 4+5 최종 integration stage
+GROUP12345_INTEGRATION_SHA
+  -> 새 대화 Application/renderer/UI/GPU/LinearSrgbV2 integration
 ```
 
 규칙:
 
 - planning commit을 push한 뒤 `PLAN_ANCHOR_SHA`를 캡처한다.
-- leaf worktree는 pushed `GROUP123_CONTRACT_SHA`에서만 만든다.
-- G4는 code anchor인 `GROUP123_INTEGRATION_SHA`에서만 시작한다.
-- G5는 Sobel/Laplacian/Emboss가 G4 convolution을 소비하므로 `G4_INTEGRATION_SHA`에서 시작한다.
+- G1~3, G4-A, G5-A, G5-B worktree는 pushed `GROUP12345_CONTRACT_SHA`에서만 만든다.
+- G4-B/G5-C는 pushed `G4_CONVOLUTION_SHA`, G4-C는 pushed `G4_GAUSSIAN_SHA`에서만 만든다.
 - descendant RESULT metadata commit은 input base가 아니다.
 - metadata에는 code anchor를 기록하고, metadata tip 자체는 push 후 채팅/외부 handoff에만 보고한다. commit이 자기 SHA를 기록하게 하지 않는다.
 - branch 이름이나 unpushed SHA를 input identity로 사용하지 않는다.
@@ -497,11 +658,19 @@ src/OctoPaint.ImageProcessing/include/octopaint/image/Levels.h
 src/OctoPaint.ImageProcessing/include/octopaint/image/Curves.h
 src/OctoPaint.ImageProcessing/include/octopaint/image/ColorMath.h
 src/OctoPaint.ImageProcessing/include/octopaint/image/ColorAdjustments.h
+src/OctoPaint.ImageProcessing/include/octopaint/image/NeighborhoodImageView.h
+src/OctoPaint.ImageProcessing/include/octopaint/image/Convolution.h
+src/OctoPaint.ImageProcessing/include/octopaint/image/GaussianBlur.h
+src/OctoPaint.ImageProcessing/include/octopaint/image/Sharpen.h
+src/OctoPaint.ImageProcessing/include/octopaint/image/Effects.h
+src/OctoPaint.ImageProcessing/include/octopaint/image/EdgeDetection.h
+src/OctoPaint.ImageProcessing/include/octopaint/image/Dither.h
 src/OctoPaint.ImageProcessing/src/ImageView.cpp
 src/OctoPaint.ImageProcessing/src/ProcessResult.cpp
 src/OctoPaint.ImageProcessing/src/Lut.cpp
 src/OctoPaint.ImageProcessing/src/TransferLut.cpp
 src/OctoPaint.ImageProcessing/src/ColorMath.cpp
+src/OctoPaint.ImageProcessing/src/NeighborhoodImageView.cpp
 tests/OctoPaint.ImageProcessing.TestSupport/ImageFixtures.h
 tests/OctoPaint.ImageProcessing.Foundation.Tests/**
 이 문서 §3~4와 RESULT 구역
@@ -511,7 +680,8 @@ tests/OctoPaint.ImageProcessing.Foundation.Tests/**
 
 - test를 먼저 작성하고 RED를 실행한 뒤 최소 production code를 쓴다.
 - complete enum/signature/formula와 exhaustive LUT test를 publish한다.
-- 첫 leaf dispatch 뒤에는 additive/breaking contract request를 모두 거부한다. 변경이 필수면 모든 wave를 중단하고 새 contract commit을 push해 `GROUP123_CONTRACT_SHA`를 재지정한 뒤 **모든** leaf worktree를 새로 만들며 old-anchor tip은 landing 금지한다.
+- neighborhood empty no-op, empty-full sampler `InvalidRegion`/output 보존과 Clamp/Mirror/Transparent border mapping을 Foundation test에서 RED-GREEN으로 고정한다.
+- 첫 leaf dispatch 뒤에는 additive/breaking contract request를 모두 거부한다. 변경이 필수면 모든 wave를 중단하고 새 contract commit을 push해 `GROUP12345_CONTRACT_SHA`를 재지정한 뒤 **모든** leaf worktree를 새로 만들며 old-anchor tip은 landing 금지한다.
 - fixture는 read-only header-only test support로 publish한다. source와 destination storage를 분리하고 mutable destination access를 명시한다.
 
 ## 8. 현재 대화 내부 병렬 분배
@@ -558,7 +728,7 @@ transparent policy, straight RGB, Luma709Q8, alpha bins, count total, overflow/f
 
 ### Wave 2 — 동시 3개
 
-Wave 1 slot이 반환된 뒤 시작하며 input은 여전히 `GROUP123_CONTRACT_SHA`다.
+Wave 1 slot이 반환된 뒤 시작하며 input은 여전히 `GROUP12345_CONTRACT_SHA`다.
 
 #### G2-B Levels
 
@@ -596,9 +766,9 @@ owns:
 
 Hue Shift → Saturation → combined Hue/Saturation 순서로 RED-GREEN-REFACTOR한다. primary/secondary, gray invariant, `±120°`, `±360°`, saturation 0/1x/2x, grid checksum, alpha/stride/alias를 검증한다.
 
-### Wave 3 — 1개
+### Wave 3 — 동시 3개
 
-Wave 2 slot이 반환된 뒤 시작하며 input은 여전히 `GROUP123_CONTRACT_SHA`다.
+Wave 2 slot이 반환된 뒤 시작하며 input은 여전히 `GROUP12345_CONTRACT_SHA`다.
 
 #### G3-B RGB Offset·Colorize
 
@@ -611,6 +781,90 @@ owns:
 ```
 
 RGB Offset → Colorize 순서로 RED-GREEN-REFACTOR한다. offset clamp, strength 0/1, HSL lightness 관계, transparent/partial alpha, failure atomicity를 검증한다.
+
+#### G4-A Neighborhood·Convolution·Box Blur
+
+```text
+branch: feat/imageproc-g4-convolution
+worktree: /home/beelink/octopaint-worktrees/imageproc-g4-convolution
+owns:
+  src/OctoPaint.ImageProcessing/src/Convolution.cpp
+  tests/OctoPaint.ImageProcessing.Convolution.Tests/main.cpp
+```
+
+pushed foundation의 region/halo validation·border sampling seam 재검증 → separable/3×3 convolution → Box Blur 순서로 RED-GREEN-REFACTOR한다. impulse, constant, radius 0, all border modes, insufficient halo, tile/whole equality, overlap, premultiplied invariant를 검증한다. separable/Box는 `ScratchBudget{required-1}`에서 destination 불변 `ResourceLimitExceeded`, exact required에서 success, identity의 zero-scratch success를 검증한다.
+
+G4-A complete packet을 검증한 integration owner는 이 leaf를 별도 request-record landing commit으로 즉시 main에 push하고 그 code SHA를 `G4_CONVOLUTION_SHA`로 게시한다.
+
+#### G5-A Threshold·Posterize·Solarize·Sepia
+
+```text
+branch: feat/imageproc-g5-effects
+worktree: /home/beelink/octopaint-worktrees/imageproc-g5-effects
+owns:
+  src/OctoPaint.ImageProcessing/src/Effects.cpp
+  tests/OctoPaint.ImageProcessing.Effects.Tests/main.cpp
+```
+
+threshold equality, posterize level/rounding, solarize equality, Q14 sepia matrix, straight/premultiplied conversion, alpha/stride/alias와 invalid spec atomicity를 검증한다.
+
+### Wave 4 — 동시 2개
+
+G4-B worktree는 pushed `G4_CONVOLUTION_SHA`, G5-B worktree는 `GROUP12345_CONTRACT_SHA`에서 만든다.
+
+#### G4-B Gaussian Blur
+
+```text
+branch: feat/imageproc-g4-gaussian
+worktree: /home/beelink/octopaint-worktrees/imageproc-g4-gaussian
+owns:
+  src/OctoPaint.ImageProcessing/src/GaussianBlur.cpp
+  tests/OctoPaint.ImageProcessing.GaussianBlur.Tests/main.cpp
+```
+
+radius 0~8 exact binomial Q16 kernel checksum, constant/impulse, border, alpha, tile/whole equality를 검증한다. Gaussian은 `ScratchBudget{required-1}` failure atomicity, exact required success, radius 0 zero-scratch success와 upper-bound option precedence를 포함한다.
+
+G4-B complete packet을 검증한 integration owner는 이 leaf를 별도 request-record landing commit으로 즉시 main에 push하고 그 code SHA를 `G4_GAUSSIAN_SHA`로 게시한다.
+
+#### G5-B Deterministic Noise·Ordered Dither
+
+```text
+branch: feat/imageproc-g5-dither
+worktree: /home/beelink/octopaint-worktrees/imageproc-g5-dither
+owns:
+  src/OctoPaint.ImageProcessing/src/Dither.cpp
+  tests/OctoPaint.ImageProcessing.Dither.Tests/main.cpp
+```
+
+SplitMix64 seed/channel vectors, amplitude 0/extrema, Bayer 4×4 equality, full-image origin, tile/whole equality, alpha와 failure atomicity를 검증한다.
+
+### Wave 5 — 동시 2개
+
+G4-C worktree는 pushed `G4_GAUSSIAN_SHA`, G5-C worktree는 pushed `G4_CONVOLUTION_SHA`에서 만든다.
+
+#### G4-C Sharpen·Unsharp Mask
+
+```text
+branch: feat/imageproc-g4-sharpen
+worktree: /home/beelink/octopaint-worktrees/imageproc-g4-sharpen
+owns:
+  src/OctoPaint.ImageProcessing/src/Sharpen.cpp
+  tests/OctoPaint.ImageProcessing.Sharpen.Tests/main.cpp
+```
+
+fixed 3×3 sharpen, amount 0 identity, Gaussian-based unsharp, extrema clamp, alpha invariant, border와 tile/whole equality를 검증한다. Unsharp amount>0의 `36*P` budget-minus-one failure atomicity/exact-budget success와 amount 0 zero-scratch success를 포함한다.
+
+#### G5-C Sobel·Laplacian·Emboss
+
+```text
+branch: feat/imageproc-g5-edge
+worktree: /home/beelink/octopaint-worktrees/imageproc-g5-edge
+owns:
+  src/OctoPaint.ImageProcessing/src/EdgeDetection.cpp
+  tests/OctoPaint.ImageProcessing.Edge.Tests/main.cpp
+```
+
+horizontal/vertical step fixtures, Clamp/Mirror 및 interior에서 constant Sobel/Laplacian 0·Emboss 128, Transparent constant-100 2×2의 exact edge/emboss golden, all border modes, halo rejection, source-alpha preservation과 tile/whole equality를 검증한다.
 
 ### leaf 공통 금지 경로
 
@@ -643,7 +897,7 @@ Contract requests
 Limitations
 ```
 
-## 9. Group 1·2·3 landing 및 integration owner
+## 9. Group 1·2·3·4·5 landing 및 integration owner
 
 실행 주체: 현재 대화 주 에이전트  
 main과 shared seam의 유일한 owner
@@ -679,14 +933,14 @@ landing protocol:
 
 request-record protocol:
 
-- planning commit, contract/foundation commit, 일곱 leaf landing commit, shared integration commit, RESULT metadata commit 각각에 그 commit으로 완료되는 작업의 `REQUESTS.md` entry를 포함하고 즉시 push한다.
+- planning/amendment commit, contract/foundation commit, 열세 leaf landing commit, shared integration commit, RESULT metadata commit 각각에 그 commit으로 완료되는 작업의 `REQUESTS.md` entry를 포함하고 즉시 push한다.
 - raw leaf tip은 review input이라 `REQUESTS.md`를 포함하지 않는다.
 - 서로 다른 leaf와 shared integration을 하나의 commit 또는 하나의 request entry로 합치지 않는다.
 
 branch-local direct gate는 CMake 등록 여부와 무관하게 다음 source list를 사용한다.
 
 ```text
-COMMON     = ImageView.cpp ProcessResult.cpp Lut.cpp TransferLut.cpp ColorMath.cpp
+COMMON     = ImageView.cpp ProcessResult.cpp Lut.cpp TransferLut.cpp ColorMath.cpp NeighborhoodImageView.cpp
 FOUNDATION = COMMON + Foundation.Tests/main.cpp
 G1-A       = COMMON + BasicTone.cpp + BasicTone.Tests/main.cpp
 G1-B   = COMMON + BasicColor.cpp + BasicColor.Tests/main.cpp
@@ -695,113 +949,68 @@ G2-B   = COMMON + Levels.cpp + Levels.Tests/main.cpp
 G2-C   = COMMON + Curves.cpp + Curves.Tests/main.cpp
 G3-A   = COMMON + HueSaturation.cpp + HueSaturation.Tests/main.cpp
 G3-B   = COMMON + Colorize.cpp + Colorize.Tests/main.cpp
+G4-A   = COMMON + Convolution.cpp + Convolution.Tests/main.cpp
+G4-B   = COMMON + Convolution.cpp + GaussianBlur.cpp + GaussianBlur.Tests/main.cpp
+G4-C   = COMMON + Convolution.cpp + GaussianBlur.cpp + Sharpen.cpp + Sharpen.Tests/main.cpp
+G5-A   = COMMON + Effects.cpp + Effects.Tests/main.cpp
+G5-B   = COMMON + Dither.cpp + Dither.Tests/main.cpp
+G5-C   = COMMON + EdgeDetection.cpp + Edge.Tests/main.cpp
 ```
 
 각 leaf는 같은 source list로 `g++ -std=c++23 -Wall -Wextra -Wpedantic -Werror -I src/OctoPaint.ImageProcessing/include -I tests/OctoPaint.ImageProcessing.TestSupport ...`를 실행한다. sanitizer gate는 `-O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer`를 추가한다. RED는 test를 먼저 작성해 같은 link 명령이 missing behavior/assertion으로 실패한 실제 결과를 기록하고 GREEN/Werror와 sanitizer를 다시 실행한다.
 
 집중 test runner:
 
-- top-level CMake/CTest target은 ImageProcessing library와 8개 test executable(Foundation, BasicTone, BasicColor, Histogram, Levels, Curves, HueSaturation, Colorize)을 빌드·실행한다.
+- top-level CMake/CTest target은 ImageProcessing library와 14개 test executable(Foundation, BasicTone, BasicColor, Histogram, Levels, Curves, HueSaturation, Colorize, Convolution, GaussianBlur, Sharpen, Effects, Dither, Edge)을 빌드·실행한다.
 - `build-headless-tests.bat`는 WiX/WinUI packaging 없이 MSBuild 또는 CMake build와 headless tests를 실행한다.
-- `build-release.bat`는 packaging 전에 focused runner 또는 동일 17개 전체 headless executable을 fail-fast로 실행한다.
-- 기존 9개 + 새 8개 = 17개 headless test executable을 README 3개 언어와 release script에 동기화한다.
+- `build-release.bat`는 packaging 전에 focused runner 또는 동일 23개 전체 headless executable을 fail-fast로 실행한다.
+- 기존 9개 + 새 14개 = 23개 headless test executable을 README 3개 언어와 release script에 동기화한다.
 
 통합 verification:
 
 - CMake GCC `-std=c++23 -Wall -Wextra -Wpedantic -Werror`
-- 새 8개 test 실행
-- 새 8개 ASan+UBSan 실행
+- 새 14개 test 실행
+- 새 14개 ASan+UBSan 실행
 - 기존 portable 9개 build/run 회귀
 - `git diff --check`, Markdown UTF-8/fence/link, XML parse
 - Windows MSVC는 실제로 실행한 경우에만 PASS. 아니면 `NOT_RUN`과 이유를 기록한다.
 
-통합 code anchor는 shared-seam code/test commit을 push한 직후 캡처한 `GROUP123_INTEGRATION_SHA`다. RESULT metadata는 그 descendant다.
+통합 code anchor는 shared-seam code/test commit을 push한 직후 캡처한 `GROUP12345_INTEGRATION_SHA`다. RESULT metadata는 그 descendant다.
 
-## 10. 새 대화에서 진행할 Group 4~5
+## 10. 새 대화에서 독립 진행할 integration workstream
 
-각 그룹은 **contract publication → implementation**을 같은 새 대화에서 직렬로 수행한다. broad feature list만 보고 바로 코딩하지 않는다.
+다섯 CPU 그룹이 `GROUP12345_INTEGRATION_SHA`로 통합된 뒤에만 다음을 별도 새 대화에서 시작한다. 이번 현재 대화는 이 파일들을 수정하지 않는다.
 
-### G4 — 공간 필터
-
-```text
-start: GROUP123_INTEGRATION_SHA
-branch: feat/imageproc-g4-filters
-worktree: /home/beelink/octopaint-worktrees/imageproc-g4-filters
-```
-
-구현 전 `NeighborhoodImageView`를 publish한다. 이 계약은 source origin, available source bounds, full-image bounds, destination origin/ROI, requested/available halo를 포함한다. border는 full-image bounds 기준이다.
-
-EncodedSrgbV1 첫 reference에서는 all four **premultiplied** RGBA channels를 동일 kernel로 convolution하고 Transparent border는 `(0,0,0,0)`이며 edge renormalization을 하지 않는다. kernel coefficient fixed-point 형식, normalization, radius/sigma, resource limit, Mirror(size 1 포함)를 contract test로 고정한다. linear-light convolution은 별도 profile이다.
+### I1 — Application operator adapter·registry
 
 ```text
-owns:
-  src/OctoPaint.ImageProcessing/include/octopaint/image/NeighborhoodImageView.h
-  src/OctoPaint.ImageProcessing/include/octopaint/image/Convolution.h
-  src/OctoPaint.ImageProcessing/include/octopaint/image/GaussianBlur.h
-  src/OctoPaint.ImageProcessing/include/octopaint/image/Sharpen.h
-  src/OctoPaint.ImageProcessing/src/NeighborhoodImageView.cpp
-  src/OctoPaint.ImageProcessing/src/Convolution.cpp
-  src/OctoPaint.ImageProcessing/src/GaussianBlur.cpp
-  src/OctoPaint.ImageProcessing/src/Sharpen.cpp
-  tests/OctoPaint.ImageProcessing.Filters.Tests/main.cpp
-forbidden: main/shared project/CMake/runner/README/docs/REQUESTS와 Group 1~3·5 files
-gate: direct GCC Werror + ASan/UBSan, impulse/constant/radius0/border/tile-halo/alpha/resource tests
-packet: §8 leaf 완료 packet과 동일
-G4_INTEGRATION_SHA: contract와 implementation/test code를 push한 branch의 마지막 code commit; descendant metadata 제외
+start: GROUP12345_INTEGRATION_SHA
+branch: feat/imageproc-application-adapter
+owns: Application의 typed operator adapter, versioned parameter schema, command/preview transaction tests
+forbidden: CPU reference algorithm 수정, WinUI/D3D wiring
 ```
 
-### G5 — 효과·분석
+### I2 — GPU parity·LinearSrgbV2
 
 ```text
-start: G4_INTEGRATION_SHA
-branch: feat/imageproc-g5-effects
-worktree: /home/beelink/octopaint-worktrees/imageproc-g5-effects
+start: GROUP12345_INTEGRATION_SHA
+branch: feat/imageproc-gpu-parity
+owns: 별도 render module의 HLSL kernels, CPU-vs-GPU golden comparison, linear profile adapter
+forbidden: CPU EncodedSrgbV1 결과를 암묵적으로 변경
 ```
 
-G4의 frozen convolution/neighborhood contract를 소비한다. contract commit에서 threshold equality, posterize level 범위, sepia matrix, edge normalization, noise distribution/seed, Bayer matrix와 full-image origin을 먼저 고정한다.
+Windows D3D/MSVC 실행 환경에서만 PASS를 기록하고 WSL-only 결과는 `NOT_RUN`이다.
+
+### I3 — Adjustment/filter UI와 Workspace wiring
 
 ```text
-owns:
-  src/OctoPaint.ImageProcessing/include/octopaint/image/Effects.h
-  src/OctoPaint.ImageProcessing/include/octopaint/image/EdgeDetection.h
-  src/OctoPaint.ImageProcessing/include/octopaint/image/Dither.h
-  src/OctoPaint.ImageProcessing/src/Effects.cpp
-  src/OctoPaint.ImageProcessing/src/EdgeDetection.cpp
-  src/OctoPaint.ImageProcessing/src/Dither.cpp
-  tests/OctoPaint.ImageProcessing.Effects.Tests/main.cpp
-forbidden: main/shared project/CMake/runner/README/docs/REQUESTS와 Group 1~4 files
-gate: direct GCC Werror + ASan/UBSan, exact effect/edge/seed/Bayer/origin/alpha tests
-packet: §8 leaf 완료 packet과 동일
-G5_INTEGRATION_SHA: G4_INTEGRATION_SHA descendant인 마지막 Group 5 code/test commit; descendant metadata 제외
+start: I1 integration anchor
+branch: feat/imageproc-adjustment-ui
+owns: WinUI dialogs/panels, Workspace command 연결, preview/cancel/apply flow, UI automation
+forbidden: CPU/GPU algorithm 또는 file-format contract 임의 변경
 ```
 
-### IP-I — Group 4~5 최종 integration stage
-
-```text
-branch: integrate/imageproc-g4-g5
-worktree: /home/beelink/octopaint-worktrees/imageproc-integration
-start: GROUP123_INTEGRATION_SHA
-ordered ranges:
-  G4 = (GROUP123_INTEGRATION_SHA, G4_INTEGRATION_SHA]
-  G5 = (G4_INTEGRATION_SHA, G5_INTEGRATION_SHA]
-```
-
-IP-I는 Group 4를 시작하는 **별도 integration 새 대화의 주 에이전트**가 맡는다. main과 다음 shared path 권한을 독점한다.
-
-```text
-OctoPaint.sln
-CMakeLists.txt
-src/OctoPaint.ImageProcessing/OctoPaint.ImageProcessing.vcxproj*
-tests/OctoPaint.ImageProcessing.*.Tests/*.vcxproj*
-build-headless-tests.bat
-build-release.bat
-README.md / README_KO.md / README_JA.md
-docs/ARCHITECTURE.md / docs/EDITOR_ARCHITECTURE.md
-docs/IMAGE_PROCESSING_IMPLEMENTATION_PLAN.md
-PROGRESS.md / REQUESTS.md
-```
-
-각 input의 COMPLETE status, exact code anchor ancestry, fetched remote tip, ownership packet을 검증한다. 위 half-open ranges만 순서대로 적용해 G5 ancestry에 들어 있는 G4를 재적용하지 않는다. Group 4와 Group 5를 별도 request-record landing commit으로 즉시 push하고 shared integration/combined tests/RESULT metadata도 각각 완료 entry와 함께 push한다.
+I1/I2/I3는 각자의 plan, exact start SHA, ownership, request-record landing 및 integration gate를 새 대화에서 다시 publish한다.
 
 ## 11. 공통 fixture와 acceptance
 
@@ -825,20 +1034,20 @@ read-only fixture: `tests/OctoPaint.ImageProcessing.TestSupport/ImageFixtures.h`
 ## 12. 현재 대화 완료 정의
 
 1. 이 계획이 감사 지적을 반영해 검증·commit·push된다.
-2. Group 1·2·3 public contract와 foundation이 strict TDD로 push된다.
-3. Wave 1 세 leaf, Wave 2 세 leaf, Wave 3 한 leaf가 별도 worktree에서 완료 packet을 제출한다.
-4. 일곱 leaf가 별도 request-record landing commit으로 main에 즉시 push된다.
+2. Group 1·2·3·4·5 public contract와 foundation이 strict TDD로 push된다.
+3. Wave 1~3 각 세 leaf와 Wave 4~5 각 두 leaf가 별도 worktree에서 완료 packet을 제출한다.
+4. 열세 leaf가 별도 request-record landing commit으로 main에 즉시 push된다.
 5. shared project/CMake/runner/docs integration과 combined regression이 push된다.
-6. 새 8개 portable test와 기존 9개 회귀가 통과한다.
+6. 새 14개 portable test와 기존 9개 회귀가 통과한다.
 7. Windows evidence는 실제 상태대로 PASS 또는 `NOT_RUN`이다.
-8. `GROUP123_INTEGRATION_SHA`와 downstream G4 start instruction을 RESULT에 기록한다.
+8. `GROUP12345_INTEGRATION_SHA`와 downstream I1/I2/I3 start instruction을 RESULT에 기록한다. I3는 I1 integration anchor에 의존한다.
 
 ## 13. RESULT
 
-계획 상태: `COMPLETE`  
+계획 상태: `COMPLETE`
 Plan anchor: plan commit push 후 기록  
-Group 1·2·3 contract SHA: contract commit push 후 기록  
-Group 1·2·3 integration anchor: integration code commit push 후 기록  
+Group 1·2·3·4·5 contract SHA: contract commit push 후 기록
+Group 1·2·3·4·5 integration anchor: integration code commit push 후 기록
 RESULT metadata tip: push 후 외부 handoff에만 보고  
 Windows MSVC/WinUI evidence: `NOT_RUN` — WSL에서 실행하지 않음
 
@@ -852,11 +1061,17 @@ G2-B Status: NOT_STARTED
 G2-C Status: NOT_STARTED
 G3-A Status: NOT_STARTED
 G3-B Status: NOT_STARTED
+G4-A Status: NOT_STARTED
+G4-B Status: NOT_STARTED
+G4-C Status: NOT_STARTED
+G5-A Status: NOT_STARTED
+G5-B Status: NOT_STARTED
+G5-C Status: NOT_STARTED
 ```
 
 각 완료 시 §8의 complete packet으로 교체한다.
 
-### Group 1·2·3 통합 결과
+### Group 1·2·3·4·5 통합 결과
 
 ```text
 Status: NOT_STARTED
@@ -869,11 +1084,17 @@ G2-B landing commit:
 G2-C landing commit:
 G3-A landing commit:
 G3-B landing commit:
+G4-A landing commit / G4_CONVOLUTION_SHA:
+G4-B landing commit / G4_GAUSSIAN_SHA:
+G4-C landing commit:
+G5-A landing commit:
+G5-B landing commit:
+G5-C landing commit:
 Combined ownership audit: NOT_RUN
 Portable Werror tests: NOT_RUN
 Portable sanitizer tests: NOT_RUN
 Existing 9-test regression: NOT_RUN
 Windows MSVC/WinUI: NOT_RUN
 Integration anchor SHA:
-Downstream G4 input instruction:
+Downstream I1/I2/I3 input instruction (I3 starts from I1 integration anchor):
 ```

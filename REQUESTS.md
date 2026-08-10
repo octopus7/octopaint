@@ -860,3 +860,52 @@
 - Mermaid Gantt의 계층형 task 제약 때문에 부모·자식 관계는 작업별 section과 `주작업`/`보조` 접두어로 표현한다.
 - 실제 시작하지 않은 foundation과 Wave 1~5는 시작·종료 시각을 추정하지 않고 차트에서 제외한다.
 - 진행 중 막대의 오른쪽 끝은 문서 스냅샷일 뿐 실제 완료 시각이 아니며, 후속 작업 종료 시 갱신할 수 있다.
+
+---
+
+# 요청 시작: 2026-08-10 19:30:25 KST | 작업 완료: 2026-08-10 20:47:09 KST (소요 시간: 1시간 16분 44초)
+
+## 구현 내역
+
+- 현재 대화 실행 범위를 Group 4 Convolution, Box/Gaussian Blur, Sharpen 및 Unsharp Mask까지 확장했다.
+- full-image coordinate, destination ROI, halo, Clamp/Mirror/Transparent border와 empty-domain sampling을 포함한 neighborhood contract를 고정했다.
+- G4-A Convolution·Box Blur → `G4_CONVOLUTION_SHA` → G4-B Gaussian → `G4_GAUSSIAN_SHA` → G4-C Sharpen·Unsharp의 직렬 dependency를 정의했다.
+- Q16/Q32 accumulator bound, exact Gaussian binomial checksum, alpha clamp 순서와 whole/tile byte equality를 규범화했다.
+- 512 MiB `ScratchBudget`, operation별 peak scratch 공식, checked arithmetic, allocation-before-mutation 및 `bad_alloc`/`length_error` 결과 mapping을 추가했다.
+
+## 정합성과 품질 검사
+
+- Group 4 전용 감사와 전체 5그룹 dependency·ownership 감사를 반복해 G4-C의 Gaussian start anchor와 branch-local source reachability를 검증했다.
+- budget-minus-one, exact-budget, zero-scratch acceptance와 empty-full sampler `ProcessResult::Succeeded`/`InvalidRegion` 구분을 최종 감사했다.
+- C++23 probe로 `ScratchBudget` default API와 512 MiB 상수 표현을 warnings-as-errors로 컴파일했다.
+
+## 결정 내용
+
+- shared neighborhood validator/sampler 구현은 G4-A leaf가 아니라 foundation/COMMON이 소유하며 모든 G4/G5 neighborhood leaf가 frozen contract에서 소비한다.
+- `EncodedSrgbV1` reference convolution은 premultiplied RGBA 네 channel을 처리하며 중간 invariant clamp 없이 최종 alpha 후 RGB 순서로 clamp한다.
+- G4-C는 G4-B와 병렬 시작하지 않고 pushed `G4_GAUSSIAN_SHA`에서만 시작한다.
+
+---
+
+# 요청 시작: 2026-08-10 19:36:21 KST | 작업 완료: 2026-08-10 20:47:09 KST (소요 시간: 1시간 10분 48초)
+
+## 구현 내역
+
+- 현재 대화 실행 범위를 Group 5 Threshold, Posterize, Solarize, Sepia, deterministic Noise, Ordered Dither, Sobel, Laplacian 및 Emboss까지 확장했다.
+- G5-A point effects, G5-B Noise·Dither, G5-C edge·Emboss의 세 비중첩 leaf/test executable과 Wave 3~5 배치를 정의했다.
+- SplitMix64의 exact modulo-2^64 순서, signed conversion 전 subtraction 금지, channel constants, frozen vectors와 global-origin tile determinism을 고정했다.
+- Bayer 4×4 threshold, source-alpha 보존/premultiply-once, zero-sum Emboss 및 Transparent 2×2 exact golden을 규범화했다.
+- 전체 범위를 13개 leaf, 새 14개 test executable, 기존 9개 포함 총 23개 headless executable로 확정했다.
+
+## 정합성과 품질 검사
+
+- typed C++23 Noise probe에서 frozen 세 vector `(6,-6,3)`, `(11,9,-15)`, `(83,-254,142)`를 모두 재현했다.
+- Transparent constant-100 2×2 Emboss fixture `[255,128;128,0]`을 독립 계산으로 재현했다.
+- 마지막 stable-hash 독립 감사에서 content SHA-256 `dd576c38856996391e26eaa78e2db03d649704783e6d39bba5dfbef3bc26cc17` 기준 P0/P1/P2 0건 `PASS`를 받았다.
+- UTF-8, code fence, local link, ownership/count marker 및 `git diff --check`를 통과했다.
+
+## 결정 내용
+
+- Noise는 mutable PRNG stream이 아니라 seed·전역 좌표·channel domain hash를 사용한다.
+- edge/Emboss는 foundation neighborhood seam을 소비하고 output alpha는 같은 full-image coordinate의 source alpha다.
+- CPU reference Group 1~5 이후 새 대화에는 I1 Application adapter·registry, I2 UI/preview, I3 GPU parity·`LinearSrgbV2`만 남긴다.
